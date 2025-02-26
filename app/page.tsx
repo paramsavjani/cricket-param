@@ -19,7 +19,7 @@ export default function Home() {
       try {
         const { provider, address, error } = await connectWallet()
         if (provider && address) {
-          setProvider(provider)
+          setProvider(provider);
           setAddress(address)
         } else if (error) {
           setError(error)
