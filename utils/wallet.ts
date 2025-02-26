@@ -1,5 +1,11 @@
 import { ethers } from "ethers"
 
+declare global {
+  interface Window {
+    ethereum: any
+  }
+}
+
 let isConnecting = false
 let connectionPromise: Promise<{ provider: any | null; address: string | null; error: string | null }> | null = null
 
@@ -9,7 +15,7 @@ export async function connectWallet() {
     return connectionPromise!
   }
 
-  if (typeof window.ethereum !== "undefined") {
+  if (typeof window?.ethereum !== "undefined") {
     isConnecting = true
     connectionPromise = new Promise(async (resolve) => {
       try {
