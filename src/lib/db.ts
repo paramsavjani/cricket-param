@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 const MONGODB_URI =
-  "mongodb+srv://paramsavjani:parampbr**@cricket.sl88y.mongodb.net/CRICKET";
+  "mongodb+srv://paramsavjani:parampbr**@cricket.sl88y.mongodb.net/TEMP";
 
 const cached: {
   conn: mongoose.Connection | null;
