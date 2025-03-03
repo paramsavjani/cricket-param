@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
+/* eslint-disable @typescript-eslint/no-unused-vars */
 
 import { useState, useEffect } from "react";
 import {
@@ -77,6 +77,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+// 1. Add Sonner import at the top with other imports
+import { Toaster, toast } from "sonner";
+
 // Create a client
 const queryClient = new QueryClient();
 
@@ -113,7 +116,6 @@ interface Match {
   teamA: string;
   teamB: string;
   matchDate: string;
-  questions: Question[];
 }
 
 interface Question {
@@ -146,9 +148,15 @@ function DashBoard() {
   const [selectedOption, setSelectedOption] = useState<{
     [key: string]: string;
   }>({});
-  const [isPlacingBet, setIsPlacingBet] = useState(false);
+  // 3. Update the isPlacingBet state to be an object instead of boolean
+  const [isPlacingBet, setIsPlacingBet] = useState<{ [key: string]: boolean }>(
+    {}
+  );
+  // 4. Add a loading state for questions
+  const [isQuestionLoading, setIsQuestionLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("upcoming");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [questions, setQuestions] = useState<Question[]>([]);
 
   // Mock predictions data
   const [predictions, setPredictions] = useState<Prediction[]>([
@@ -193,73 +201,19 @@ function DashBoard() {
     const fetchMatches = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch("/api/layout/fetch");
+        const response = await fetch("/api/layout/matches");
         const data = await response.json();
+        console.log(data.matches);
         setMatches(data.matches);
       } catch (error) {
         console.error("Error fetching matches:", error);
-        // Fallback mock data if API fails
-        setMatches([
-          {
-            _id: "1",
-            teamA: "India",
-            teamB: "Australia",
-            matchDate: new Date(Date.now() + 86400000 * 2).toISOString(),
-            questions: [
-              {
-                _id: "q1",
-                question: "Which team will win?",
-                options: ["India", "Australia", "Draw"],
-                isActive: true,
-                closedAt: new Date(Date.now() + 86400000).toISOString(),
-              },
-              {
-                _id: "q2",
-                question: "Will there be a century?",
-                options: ["Yes", "No"],
-                isActive: true,
-                closedAt: new Date(Date.now() + 86400000).toISOString(),
-              },
-            ],
-          },
-          {
-            _id: "2",
-            teamA: "England",
-            teamB: "South Africa",
-            matchDate: new Date(Date.now() + 86400000 * 4).toISOString(),
-            questions: [
-              {
-                _id: "q3",
-                question: "Which team will score more in powerplay?",
-                options: ["England", "South Africa"],
-                isActive: true,
-                closedAt: new Date(Date.now() + 86400000 * 3).toISOString(),
-              },
-            ],
-          },
-          {
-            _id: "3",
-            teamA: "Pakistan",
-            teamB: "New Zealand",
-            matchDate: new Date(Date.now() + 86400000 * 6).toISOString(),
-            questions: [
-              {
-                _id: "q4",
-                question: "Total wickets in the match?",
-                options: ["Less than 10", "10-15", "More than 15"],
-                isActive: true,
-                closedAt: new Date(Date.now() + 86400000 * 5).toISOString(),
-              },
-            ],
-          },
-        ]);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchMatches();
-  }, []);
+  }, [address]);
 
   useEffect(() => {
     if (isConnected && chain && chain.id !== sepolia.id) {
@@ -273,10 +227,8 @@ function DashBoard() {
   const handleSwitchToSepolia = async () => {
     try {
       switchChain({ chainId: sepolia.id });
-     
     } catch (error) {
       console.error("Failed to switch network:", error);
-     
     }
   };
 
@@ -313,26 +265,26 @@ function DashBoard() {
     return `${minutes}m remaining`;
   };
 
+  // 2. Update the handleBet function to track loading state per question
   const handleBet = async (questionId: string) => {
     if (!address) {
-      
+      toast.error("Please connect your wallet first");
       return;
     }
 
     if (!selectedOption[questionId]) {
-     
+      toast.error("Please select an option first");
       return;
     }
 
-    setIsPlacingBet(true);
+    // Track loading state for this specific question
+    setIsPlacingBet((prev) => ({ ...prev, [questionId]: true }));
 
     try {
-      // Fixed contract write function using the latest wagmi hooks
       await writeContractAsync({
         address: "0x66f8ECD191AF7F90bc4Fe82629d525e5AB9FDf4C",
         abi: abi,
         functionName: "vote",
-        // args: [address],
       });
 
       // Call the backend API to create a betting instance
@@ -354,9 +306,7 @@ function DashBoard() {
 
       // Add to predictions
       if (selectedMatch) {
-        const question = selectedMatch.questions.find(
-          (q) => q._id === questionId
-        );
+        const question = questions.find((q) => q._id === questionId);
         if (question) {
           const newPrediction: Prediction = {
             id: Date.now().toString(),
@@ -371,18 +321,18 @@ function DashBoard() {
         }
       }
 
-      
-
       // Reset selected option for this question
       setSelectedOption((prev) => ({
         ...prev,
         [questionId]: "",
       }));
+
+      toast.success("Prediction placed successfully!");
     } catch (error) {
       console.error("Error placing bet:", error);
-     
+      toast.error("Failed to place prediction. Please try again.");
     } finally {
-      setIsPlacingBet(false);
+      setIsPlacingBet((prev) => ({ ...prev, [questionId]: false }));
     }
   };
 
@@ -419,12 +369,6 @@ function DashBoard() {
           .toUpperCase()}`
       );
     };
-
-    // Usage example:
-    console.log(getTeamLogo("Mumbai Indians")); // Should return the Mumbai Indians logo URL
-
-    console.log(teamName);
-
     return (
       teamLogos[teamName] ||
       `/placeholder.svg?height=40&width=40&text=${teamName
@@ -454,6 +398,40 @@ function DashBoard() {
         return "Pending";
     }
   };
+
+  // 5. Update the useEffect for fetching questions to use the loading state
+  useEffect(() => {
+    async function fetchQuestions() {
+      if (selectedMatch) {
+        setIsQuestionLoading(true);
+        try {
+          const res = await fetch(
+            `/api/layout/questions?id=${selectedMatch._id}`,
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            }
+          );
+          const data = await res.json();
+          if(!res.ok) {
+            toast.error(data.message);
+            return;
+          }
+          setQuestions(data.questions);
+        } catch (error) {
+          console.error("Error fetching questions:", error);
+          toast.error("Failed to load match questions");
+        } finally {
+          setIsQuestionLoading(false);
+        }
+      } else {
+        setQuestions([]);
+      }
+    }
+    fetchQuestions();
+  }, [selectedMatch]);
 
   // Sidebar navigation items
   const navItems = [
@@ -804,16 +782,16 @@ function DashBoard() {
                                   <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-4">
                                       <img
-                                      src={
-                                        getTeamLogo(
-                                        matches[currentMatchIndex].teamA
-                                        ) || "/placeholder.svg"
-                                      }
-                                      alt={matches[currentMatchIndex].teamA}
-                                      className="h-auto max-h-3"
+                                        src={
+                                          getTeamLogo(
+                                            matches[currentMatchIndex]?.teamA
+                                          ) || "/placeholder.svg"
+                                        }
+                                        alt={matches[currentMatchIndex].teamA}
+                                        className="h-auto max-h-20"
                                       />
                                       <span className="text-xl font-bold">
-                                      {matches[currentMatchIndex].teamA}
+                                        {matches[currentMatchIndex].teamA}
                                       </span>
                                     </div>
                                     <span className="text-xl font-bold">
@@ -830,7 +808,7 @@ function DashBoard() {
                                           ) || "/placeholder.svg"
                                         }
                                         alt={matches[currentMatchIndex].teamB}
-                                        className="h-auto max-h-3"
+                                        className="h-auto max-h-20"
                                       />
                                     </div>
                                   </div>
@@ -1025,7 +1003,7 @@ function DashBoard() {
                           </CardHeader>
                           <CardContent className="p-4">
                             <div className="text-sm text-muted-foreground mb-2">
-                              {match.questions.length} prediction questions
+                              {questions?.length > 0} prediction questions
                               available
                             </div>
                             <div className="flex items-center gap-2">
@@ -1239,85 +1217,105 @@ function DashBoard() {
           </DialogHeader>
           <ScrollArea className="max-h-[60vh]">
             <div className="space-y-4 p-6">
-              {selectedMatch?.questions.map((question) => (
-                <Card
-                  key={question._id}
-                  className="overflow-hidden border-primary/20"
-                >
-                  <CardHeader className="bg-primary/5">
-                    <div className="flex justify-between items-center">
-                      <CardTitle className="text-lg">
-                        {question.question}
-                      </CardTitle>
-                      <Badge variant="outline" className="ml-2">
-                        {getTimeRemaining(question.closedAt)}
-                      </Badge>
-                    </div>
-                    <CardDescription className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      Closes: {formatDate(question.closedAt)}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                      {question.options.map((option, index) => (
-                        <motion.div
-                          key={index}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() =>
-                            setSelectedOption({
-                              ...selectedOption,
-                              [question._id]: option,
-                            })
-                          }
-                          className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                            selectedOption[question._id] === option
-                              ? "border-primary bg-primary/10"
-                              : "border-muted hover:border-primary/50"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <div
-                              className={`h-4 w-4 rounded-full border ${
-                                selectedOption[question._id] === option
-                                  ? "border-primary bg-primary"
-                                  : "border-muted-foreground"
-                              }`}
-                            >
-                              {selectedOption[question._id] === option && (
-                                <div className="h-2 w-2 m-[3px] rounded-full bg-white" />
-                              )}
+              {/* 8. Add a loading state for the questions in the match detail modal */}
+              {isQuestionLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-32 w-full rounded-lg" />
+                  <Skeleton className="h-32 w-full rounded-lg" />
+                  <Skeleton className="h-32 w-full rounded-lg" />
+                </div>
+              ) : selectedMatch && questions && questions.length > 0 ? (
+                questions.map((question) => (
+                  <Card
+                    key={question._id}
+                    className="overflow-hidden border-primary/20"
+                  >
+                    <CardHeader className="bg-primary/5">
+                      <div className="flex justify-between items-center">
+                        <CardTitle className="text-lg">
+                          {question.question}
+                        </CardTitle>
+                        <Badge variant="outline" className="ml-2">
+                          {getTimeRemaining(question.closedAt)}
+                        </Badge>
+                      </div>
+                      <CardDescription className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Closes: {formatDate(question.closedAt)}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        {question.options.map((option, index) => (
+                          <motion.div
+                            key={index}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() =>
+                              setSelectedOption({
+                                ...selectedOption,
+                                [question._id]: option,
+                              })
+                            }
+                            className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                              selectedOption[question._id] === option
+                                ? "border-primary bg-primary/10"
+                                : "border-muted hover:border-primary/50"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`h-4 w-4 rounded-full border ${
+                                  selectedOption[question._id] === option
+                                    ? "border-primary bg-primary"
+                                    : "border-muted-foreground"
+                                }`}
+                              >
+                                {selectedOption[question._id] === option && (
+                                  <div className="h-2 w-2 m-[3px] rounded-full bg-white" />
+                                )}
+                              </div>
+                              <span className="font-medium">{option}</span>
                             </div>
-                            <span className="font-medium">{option}</span>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </CardContent>
-                  <CardFooter className="bg-primary/5 p-4 flex justify-end">
-                    <Button
-                      onClick={() => handleBet(question._id)}
-                      disabled={!selectedOption[question._id] || isPlacingBet}
-                      className="relative overflow-hidden"
-                    >
-                      {isPlacingBet ? (
-                        <>
-                          <span className="opacity-0">Place Prediction</span>
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          Place Prediction
-                          <Sparkles className="ml-2 h-4 w-4" />
-                        </>
-                      )}
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))}
+                          </motion.div>
+                        ))}
+                      </div>
+                    </CardContent>
+                    {/* 7. Update the CardFooter in the match detail modal to use per-question loading state */}
+                    <CardFooter className="bg-primary/5 p-4 flex justify-end">
+                      <Button
+                        onClick={() => handleBet(question._id)}
+                        disabled={
+                          !selectedOption[question._id] ||
+                          isPlacingBet[question._id]
+                        }
+                        className="relative overflow-hidden"
+                      >
+                        {isPlacingBet[question._id] ? (
+                          <>
+                            <span className="opacity-0">Place Prediction</span>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            Place Prediction
+                            <Sparkles className="ml-2 h-4 w-4" />
+                          </>
+                        )}
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <AlertTriangle className="h-12 w-12 text-muted-foreground mb-4" />
+                  <p className="text-center text-muted-foreground">
+                    No prediction questions available for this match yet.
+                  </p>
+                </div>
+              )}
             </div>
           </ScrollArea>
           <DialogFooter className="bg-primary/5 p-4 rounded-b-lg">
@@ -1372,6 +1370,28 @@ function DashBoard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 9. Add a modal overlay to prevent interactions during submission */}
+      {Object.values(isPlacingBet).some(Boolean) && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <Card className="w-[300px]">
+            <CardHeader>
+              <CardTitle className="text-center">
+                Processing Prediction
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center">
+              <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+              <p className="text-center text-muted-foreground">
+                Please wait while we process your prediction...
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* 10. Add the Sonner Toaster component at the end of the return statement, just before the closing div */}
+      <Toaster position="top-right" richColors />
     </div>
   );
 }

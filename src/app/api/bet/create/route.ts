@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     user = await User.findOne({
       address,
     });
-
+    console.log(questionId);
     const question = await Question.findById(questionId);
     if (!question) {
       return NextResponse.json(
