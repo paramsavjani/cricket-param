@@ -1,1 +1,1 @@
-export defalut [];
+export default [];
