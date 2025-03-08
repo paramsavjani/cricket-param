@@ -1,31 +1,16 @@
-"use client";
 /* eslint-disable @typescript-eslint/no-unused-vars */
+"use client"
 
-import { useState, useEffect } from "react";
-import {
-  WagmiProvider,
-  createConfig,
-  http,
-  useReadContract,
-  useWriteContract,
-  useAccount,
-  useSwitchChain,
-} from "wagmi";
-import { coinbaseWallet, walletConnect } from "wagmi/connectors";
-import { sepolia, mainnet, polygon } from "wagmi/chains";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import Web3AuthConnectorInstance from "./Web3AuthConnectorInstance";
-import { ConnectButton } from "./ConnectButton";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardFooter,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useState, useEffect } from "react"
+import { WagmiProvider, createConfig, http, useReadContract, useWriteContract, useAccount, useSwitchChain } from "wagmi"
+import { coinbaseWallet, walletConnect } from "wagmi/connectors"
+import { sepolia, mainnet, polygon } from "wagmi/chains"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import Web3AuthConnectorInstance from "./Web3AuthConnectorInstance"
+import { ConnectButton } from "./ConnectButton"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import {
   Coins,
   ArrowRight,
@@ -46,8 +31,10 @@ import {
   Flame,
   Star,
   Loader2,
-} from "lucide-react";
-import abi from "../abis/Vote.json";
+  Check,
+  X,
+} from "lucide-react"
+import abi from "../abis/Vote.json"
 import {
   Dialog,
   DialogContent,
@@ -55,33 +42,22 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { motion, AnimatePresence } from "framer-motion";
-import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ThemeToggle } from "@/components/theme-toggle";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/components/ui/dialog"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { motion, AnimatePresence } from "framer-motion"
+import { Progress } from "@/components/ui/progress"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Toaster, toast } from "sonner"
 
-// 1. Add Sonner import at the top with other imports
-import { Toaster, toast } from "sonner";
+// Import the DashboardSignupIntegration component
+import DashboardSignupIntegration from "@/components/dashboard-signup-integration"
 
 // Create a client
-const queryClient = new QueryClient();
+const queryClient = new QueryClient()
 
 // Set up wagmi config
 const config = createConfig({
@@ -99,7 +75,7 @@ const config = createConfig({
     coinbaseWallet({ appName: "Cricket Prophet" }),
     Web3AuthConnectorInstance([mainnet, sepolia, polygon]),
   ],
-});
+})
 
 export default function Home() {
   return (
@@ -108,184 +84,277 @@ export default function Home() {
         <DashBoard />
       </QueryClientProvider>
     </WagmiProvider>
-  );
+  )
 }
 
 interface Match {
-  _id: string;
-  teamA: string;
-  teamB: string;
-  matchDate: string;
+  _id: string
+  teamA: string
+  teamB: string
+  matchDate: string
 }
 
 interface Question {
-  _id: string;
-  question: string;
-  options: string[];
-  isActive: boolean;
-  closedAt: string;
+  _id: string
+  question: string
+  options: string[]
+  isActive: boolean
+  closedAt: string
+  answer?: string
+  matchId: string
+}
+
+interface Bet {
+  _id: string
+  question: Question
+  match: Match
+  option: string
+  createdAt: string
+  updatedAt: string
 }
 
 interface Prediction {
-  id: string;
-  match: string;
-  question: string;
-  selectedOption: string;
-  date: string;
-  status: "pending" | "won" | "lost";
-  reward?: number;
+  id: string
+  match: string
+  question: string
+  selectedOption: string
+  date: string
+  status: "pending" | "won" | "lost"
+  reward?: number
+  matchId?: string
+  questionId?: string
 }
 
 function DashBoard() {
-  const { chains, switchChain } = useSwitchChain();
-  const { chain } = useAccount();
-  const { address, isConnected } = useAccount();
-  const [showNetworkDialog, setShowNetworkDialog] = useState(false);
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
-  const [selectedOption, setSelectedOption] = useState<{
-    [key: string]: string;
-  }>({});
-  // 3. Update the isPlacingBet state to be an object instead of boolean
-  const [isPlacingBet, setIsPlacingBet] = useState<{ [key: string]: boolean }>(
-    {}
-  );
-  // 4. Add a loading state for questions
-  const [isQuestionLoading, setIsQuestionLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("upcoming");
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [questions, setQuestions] = useState<Question[]>([]);
-
-  // Mock predictions data
-  const [predictions, setPredictions] = useState<Prediction[]>([
-    {
-      id: "1",
-      match: "India vs Australia",
-      question: "Which team will win the toss?",
-      selectedOption: "India",
-      date: "2023-11-15T10:00:00",
-      status: "won",
-      reward: 120,
-    },
-    {
-      id: "2",
-      match: "England vs New Zealand",
-      question: "Will there be a century scored?",
-      selectedOption: "Yes",
-      date: "2023-11-12T14:30:00",
-      status: "lost",
-    },
-    {
-      id: "3",
-      match: "South Africa vs Pakistan",
-      question: "Total sixes in the match?",
-      selectedOption: "More than 10",
-      date: "2023-11-18T09:15:00",
-      status: "pending",
-    },
-  ]);
+  const { chains, switchChain } = useSwitchChain()
+  const { chain } = useAccount()
+  const { address, isConnected } = useAccount()
+  const [showNetworkDialog, setShowNetworkDialog] = useState(false)
+  const [matches, setMatches] = useState<Match[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
+  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
+  const [selectedOption, setSelectedOption] = useState<{ [key: string]: string }>({})
+  const [isPlacingBet, setIsPlacingBet] = useState<{ [key: string]: boolean }>({})
+  const [isQuestionLoading, setIsQuestionLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState("upcoming")
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [questions, setQuestions] = useState<Question[]>([])
+  const [predictions, setPredictions] = useState<Prediction[]>([])
+  const [userBets, setUserBets] = useState<Bet[]>([])
+  const [isLoadingBets, setIsLoadingBets] = useState(false)
+  const [winRate, setWinRate] = useState(0)
+  const [showVerificationDialog, setShowVerificationDialog] = useState(false)
+  const [pendingQuestionId, setPendingQuestionId] = useState<string | null>(null)
 
   const { data: tokenBalance, isLoading: isBalanceLoading } = useReadContract({
     abi,
     address: "0x66f8ECD191AF7F90bc4Fe82629d525e5AB9FDf4C",
     functionName: "balanceOf",
     args: [address],
-  });
+  })
 
-  // Updated to use the latest wagmi hooks correctly
-  const { writeContractAsync, isPending, isError, error } = useWriteContract();
+  const { writeContractAsync, isPending, isError, error } = useWriteContract()
 
+  // Fetch matches
   useEffect(() => {
     const fetchMatches = async () => {
-      setIsLoading(true);
+      setIsLoading(true)
       try {
-        const response = await fetch("/api/layout/matches");
-        const data = await response.json();
-        console.log(data.matches);
-        setMatches(data.matches);
+        const response = await fetch("/api/layout/matches")
+        const data = await response.json()
+        if (data.matches && data.matches.length > 0) {
+          setMatches(data.matches)
+        }
       } catch (error) {
-        console.error("Error fetching matches:", error);
+        console.error("Error fetching matches:", error)
+        toast.error("Failed to load matches")
       } finally {
-        setIsLoading(false);
+        setIsLoading(false)
       }
-    };
+    }
 
-    fetchMatches();
-  }, [address]);
+    fetchMatches()
+  }, [])
 
+  // Fetch user bets
+  useEffect(() => {
+    const fetchUserBets = async () => {
+      if (!address) return
+
+      setIsLoadingBets(true)
+      try {
+        const response = await fetch(`/api/layout/bet?id=${address}`)
+        const data = await response.json()
+
+        if (response.ok && data.bets) {
+          setUserBets(data.bets)
+
+          // Transform bets to predictions format
+          const userPredictions = data.bets.map((bet: Bet) => {
+            const matchTeams = `${bet.match?.teamA} vs ${bet.match?.teamB}`
+            let status: "pending" | "won" | "lost" = "pending"
+            let reward = 0
+
+            // Determine status based on question answer
+            if (bet.question.answer) {
+              status = bet.option === bet.question.answer ? "won" : "lost"
+              reward = status === "won" ? 100 : 0 // Basic reward calculation
+            }
+
+            return {
+              id: bet._id,
+              match: matchTeams,
+              question: bet.question.question,
+              selectedOption: bet.option,
+              date: bet.createdAt,
+              status,
+              reward: status === "won" ? reward : undefined,
+              matchId: bet.match?._id,
+              questionId: bet.question?._id,
+            }
+          })
+
+          setPredictions(userPredictions)
+
+          // Calculate win rate
+          if (userPredictions.length > 0) {
+            const wonPredictions = userPredictions.filter((p: { status: string }) => p.status === "won").length
+            const answeredPredictions = userPredictions.filter((p: { status: string }) => p.status !== "pending").length
+
+            if (answeredPredictions > 0) {
+              setWinRate(Math.round((wonPredictions / answeredPredictions) * 100))
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching user bets:", error)
+      } finally {
+        setIsLoadingBets(false)
+      }
+    }
+
+    fetchUserBets()
+  }, [address])
+
+  // Check network
   useEffect(() => {
     if (isConnected && chain && chain.id !== sepolia.id) {
-      setShowNetworkDialog(true);
+      setShowNetworkDialog(true)
     } else {
-      setShowNetworkDialog(false);
+      setShowNetworkDialog(false)
     }
-  }, [chain, isConnected]);
+  }, [chain, isConnected])
+
+  // Fetch questions for selected match
+  useEffect(() => {
+    async function fetchQuestions() {
+      if (selectedMatch) {
+        setIsQuestionLoading(true)
+        try {
+          const res = await fetch(`/api/layout/questions?id=${selectedMatch._id}`, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          })
+          const data = await res.json()
+          if (!res.ok) {
+            toast.error(data.message)
+            return
+          }
+          setQuestions(data.questions)
+        } catch (error) {
+          console.error("Error fetching questions:", error)
+          toast.error("Failed to load match questions")
+        } finally {
+          setIsQuestionLoading(false)
+        }
+      } else {
+        setQuestions([])
+      }
+    }
+    fetchQuestions()
+  }, [selectedMatch])
 
   // Handle network switch
   const handleSwitchToSepolia = async () => {
     try {
-      switchChain({ chainId: sepolia.id });
+      switchChain({ chainId: sepolia.id })
     } catch (error) {
-      console.error("Failed to switch network:", error);
+      console.error("Failed to switch network:", error)
     }
-  };
+  }
 
-  // Format address for display
-  const formatAddress = (address: string | undefined) => {
-    if (!address) return "";
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-  };
+  // User verification
+  const verifyUser = async (address: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/users/check`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ address }),
+      })
+      const data = await response.json()
+      console.log(data)
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+      if (response.ok) {
+        return true
+      }
 
-  const getTimeRemaining = (dateString: string) => {
-    const targetDate = new Date(dateString);
-    const now = new Date();
-    const diff = targetDate.getTime() - now.getTime();
+      return false
+    } catch (error) {
+      console.error("Error verifying user:", error)
+      toast.error("Failed to verify user status")
+      return false
+    }
+  }
 
-    if (diff <= 0) return "Closed";
-
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-    if (days > 0) return `${days}d ${hours}h remaining`;
-    if (hours > 0) return `${hours}h ${minutes}m remaining`;
-    return `${minutes}m remaining`;
-  };
-
-  // 2. Update the handleBet function to track loading state per question
+  // Handle bet placement
   const handleBet = async (questionId: string) => {
     if (!address) {
-      toast.error("Please connect your wallet first");
-      return;
+      toast.error("Please connect your wallet first")
+      return
     }
 
     if (!selectedOption[questionId]) {
-      toast.error("Please select an option first");
-      return;
+      toast.error("Please select an option first")
+      return
     }
 
+    // Set pending question ID for verification flow
+    setPendingQuestionId(questionId)
+
+    // Start verification process
+    try {
+      const isVerified = await verifyUser(address)
+
+      if (!isVerified) {
+        setShowVerificationDialog(true)
+        return
+      }
+
+      // If verified, proceed with placing bet
+      await placeBet(questionId)
+    } catch (error) {
+      console.error("Error during verification:", error)
+      toast.error("Verification failed. Please try again.")
+    }
+  }
+
+  // Actual bet placement logic
+  const placeBet = async (questionId: string) => {
     // Track loading state for this specific question
-    setIsPlacingBet((prev) => ({ ...prev, [questionId]: true }));
+    setIsPlacingBet((prev) => ({ ...prev, [questionId]: true }))
 
     try {
+      // Call smart contract
       await writeContractAsync({
         address: "0x66f8ECD191AF7F90bc4Fe82629d525e5AB9FDf4C",
         abi: abi,
         functionName: "vote",
-      });
+      })
 
       // Call the backend API to create a betting instance
       const response = await fetch("/api/bet/create", {
@@ -298,15 +367,15 @@ function DashBoard() {
           questionId,
           option: selectedOption[questionId],
         }),
-      });
+      })
 
       if (!response.ok) {
-        throw new Error("Failed to create betting instance");
+        throw new Error("Failed to create betting instance")
       }
 
       // Add to predictions
       if (selectedMatch) {
-        const question = questions.find((q) => q._id === questionId);
+        const question = questions.find((q) => q._id === questionId)
         if (question) {
           const newPrediction: Prediction = {
             id: Date.now().toString(),
@@ -315,29 +384,76 @@ function DashBoard() {
             selectedOption: selectedOption[questionId],
             date: new Date().toISOString(),
             status: "pending",
-          };
+            matchId: selectedMatch._id,
+            questionId,
+          }
 
-          setPredictions((prev) => [newPrediction, ...prev]);
+          setPredictions((prev) => [newPrediction, ...prev])
         }
       }
 
       // Reset selected option for this question
       setSelectedOption((prev) => ({
         ...prev,
-        [questionId]: "",
-      }));
+        [questionId]: selectedOption[questionId], // Keep the selection to show user's choice
+      }))
 
-      toast.success("Prediction placed successfully!");
+      toast.success("Prediction placed successfully!")
     } catch (error) {
-      console.error("Error placing bet:", error);
-      toast.error("Failed to place prediction. Please try again.");
+      console.error("Error placing bet:", error)
+      toast.error("Failed to place prediction. Please try again.")
     } finally {
-      setIsPlacingBet((prev) => ({ ...prev, [questionId]: false }));
+      setIsPlacingBet((prev) => ({ ...prev, [questionId]: false }))
+      setPendingQuestionId(null)
     }
-  };
+  }
+
+  // Handle verification completion
+  const handleVerificationComplete = async (success: boolean) => {
+    setShowVerificationDialog(false)
+
+    if (success && pendingQuestionId) {
+      await placeBet(pendingQuestionId)
+    } else {
+      setPendingQuestionId(null)
+      toast.error("Please complete the sign-up process before making predictions.")
+    }
+  }
+
+  // Helper functions
+  const formatAddress = (address: string | undefined) => {
+    if (!address) return ""
+    return `${address.slice(0, 6)}...${address.slice(-4)}`
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+  const getTimeRemaining = (dateString: string) => {
+    const targetDate = new Date(dateString)
+    const now = new Date()
+    const diff = targetDate.getTime() - now.getTime()
+
+    if (diff <= 0) return "Closed"
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+
+    if (days > 0) return `${days}d ${hours}h remaining`
+    if (hours > 0) return `${hours}h ${minutes}m remaining`
+    return `${minutes}m remaining`
+  }
 
   const getTeamLogo = (teamName: string) => {
-    // This would ideally fetch actual team logos
     const teamLogos: Record<string, string> = {
       "Chennai Super Kings":
         "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhn3plcgt5OnAx_VelXAj9Z8TWBiqg6B-xgCJ__kuFeXr1ClntuhvVu0IugURU6TfyHk9qUuECEpos1E5ayEmx0fAupMIvNLQnLOwavDhBYxkIwvRv9cmm7_qHZmlcSwr3Un-hJpy92AooR9Qn77PUcr4yRgAORYwoTBjTYOmyYlHbZ0nDyaL3HWqUk/s2141/Original%20Chennai%20Super%20Fun%20Logo%20PNG%20-%20SVG%20File%20Download%20Free%20Download.png",
@@ -359,79 +475,43 @@ function DashBoard() {
         "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhAviPjlBbeRYz6ny9-HOVtr9VmyQJ3FXOw60rSy8ye_U_nMy9gPWtgEPpPMAO7va36UX6nyw9BNvWVrC5kwShXJT3V7FtA5HmDO9aAwsBS4iGQWFRQWOX_ltiBkSajurq-ulo_Mu82VYsIMDkIme9jCuqMxKTt0P1fO9bv_tdXBzYj51QgTcD7pz-2/s1024/Original%20Gujarat%20Titans%20Logo%20PNG-SVG%20File%20Download%20Free%20Download.png",
       "Lucknow Super Giants":
         "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEijb28SNOESbzSkJ5J8-YuxEweSWpHRLhF_uQ5Ceah9b61K8ytbL8fwmK9oMKbM2-ZZxlualj5wlNPlriod0mdrFFXBSx0dj0-_4DQIXwZmGkleqqiIpr0GmV7V8dkYbLXisxjWUPtf4joGikLHSiExgCpaO477APLpjA8_pGhnlvUEAJM4_TvabF85/s7201/Original%20Lucknow%20Super%20Giants%20PNG-SVG%20File%20Download%20Free%20Download.png",
-    };
+    }
 
-    const getTeamLogo = (teamName: string): string => {
-      return (
-        teamLogos[teamName] ||
-        `/placeholder.svg?height=40&width=40&text=${teamName
-          .slice(0, 3)
-          .toUpperCase()}`
-      );
-    };
-    return (
-      teamLogos[teamName] ||
-      `/placeholder.svg?height=40&width=40&text=${teamName
-        .slice(0, 3)
-        .toUpperCase()}`
-    );
-  };
+    return teamLogos[teamName] || `/placeholder.svg?height=40&width=40&text=${teamName.slice(0, 3).toUpperCase()}`
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "won":
-        return "bg-green-500";
+        return "bg-green-500"
       case "lost":
-        return "bg-red-500";
+        return "bg-red-500"
       default:
-        return "bg-yellow-500";
+        return "bg-yellow-500"
     }
-  };
+  }
 
   const getStatusText = (status: string) => {
     switch (status) {
       case "won":
-        return "Won";
+        return "Won"
       case "lost":
-        return "Lost";
+        return "Lost"
       default:
-        return "Pending";
+        return "Pending"
     }
-  };
+  }
 
-  // 5. Update the useEffect for fetching questions to use the loading state
-  useEffect(() => {
-    async function fetchQuestions() {
-      if (selectedMatch) {
-        setIsQuestionLoading(true);
-        try {
-          const res = await fetch(
-            `/api/layout/questions?id=${selectedMatch._id}`,
-            {
-              method: "GET",
-              headers: {
-                "Content-Type": "application/json",
-              },
-            }
-          );
-          const data = await res.json();
-          if(!res.ok) {
-            toast.error(data.message);
-            return;
-          }
-          setQuestions(data.questions);
-        } catch (error) {
-          console.error("Error fetching questions:", error);
-          toast.error("Failed to load match questions");
-        } finally {
-          setIsQuestionLoading(false);
-        }
-      } else {
-        setQuestions([]);
-      }
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "won":
+        return <Check className="h-3 w-3" />
+      case "lost":
+        return <X className="h-3 w-3" />
+      default:
+        return <Clock className="h-3 w-3" />
     }
-    fetchQuestions();
-  }, [selectedMatch]);
+  }
 
   // Sidebar navigation items
   const navItems = [
@@ -439,7 +519,7 @@ function DashBoard() {
     { icon: <Users className="h-5 w-5" />, label: "Leaderboard" },
     { icon: <Zap className="h-5 w-5" />, label: "Rewards" },
     { icon: <Bell className="h-5 w-5" />, label: "Notifications" },
-  ];
+  ]
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-background/95 dark:from-background dark:to-background">
@@ -451,9 +531,7 @@ function DashBoard() {
               <Cricket className="h-6 w-6 text-primary" />
               <span>Cricket Prophet</span>
             </SheetTitle>
-            <SheetDescription>
-              Make predictions on cricket matches
-            </SheetDescription>
+            <SheetDescription>Make predictions on cricket matches</SheetDescription>
           </SheetHeader>
           <div className="py-4">
             {isConnected && (
@@ -464,27 +542,19 @@ function DashBoard() {
                   </Avatar>
                   <div>
                     <p className="font-medium">{formatAddress(address)}</p>
-                    <Badge
-                      variant={
-                        chain?.id === sepolia.id ? "default" : "destructive"
-                      }
-                      className="mt-1"
-                    >
-                      {chains.find((c) => c.id === chain?.id)?.name ||
-                        "Unknown Network"}
+                    <Badge variant={chain?.id === sepolia.id ? "default" : "destructive"} className="mt-1">
+                      {chains.find((c) => c.id === chain?.id)?.name || "Unknown Network"}
                     </Badge>
                   </div>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-1">
                     <Coins className="h-4 w-4 text-primary" />
-                    <span>
-                      {tokenBalance ? tokenBalance.toString() : "0"} CPT
-                    </span>
+                    <span>{tokenBalance ? tokenBalance.toString() : "0"} CPT</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Trophy className="h-4 w-4 text-primary" />
-                    <span>67% Win Rate</span>
+                    <span>{winRate}% Win Rate</span>
                   </div>
                 </div>
               </div>
@@ -509,13 +579,12 @@ function DashBoard() {
               {!isConnected ? (
                 <ConnectButton />
               ) : (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Close Menu
-                </Button>
+                <>
+                  <DashboardSignupIntegration className="w-full mb-2" />
+                  <Button variant="outline" className="w-full" onClick={() => setIsMobileMenuOpen(false)}>
+                    Close Menu
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -543,9 +612,7 @@ function DashBoard() {
                 Cricket Prophet
               </h1>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Predict & win with blockchain
-            </p>
+            <p className="text-sm text-muted-foreground">Predict & win with blockchain</p>
           </div>
 
           {isConnected && (
@@ -556,27 +623,19 @@ function DashBoard() {
                 </Avatar>
                 <div>
                   <p className="font-medium">{formatAddress(address)}</p>
-                  <Badge
-                    variant={
-                      chain?.id === sepolia.id ? "default" : "destructive"
-                    }
-                    className="mt-1"
-                  >
-                    {chains.find((c) => c.id === chain?.id)?.name ||
-                      "Unknown Network"}
+                  <Badge variant={chain?.id === sepolia.id ? "default" : "destructive"} className="mt-1">
+                    {chains.find((c) => c.id === chain?.id)?.name || "Unknown Network"}
                   </Badge>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div className="flex items-center gap-1">
                   <Coins className="h-4 w-4 text-primary" />
-                  <span>
-                    {tokenBalance ? tokenBalance.toString() : "0"} CPT
-                  </span>
+                  <span>{tokenBalance ? tokenBalance.toString() : "0"} CPT</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Trophy className="h-4 w-4 text-primary" />
-                  <span>67% Win Rate</span>
+                  <span>{winRate}% Win Rate</span>
                 </div>
               </div>
             </div>
@@ -586,10 +645,7 @@ function DashBoard() {
             <ul className="space-y-2">
               {navItems.map((item, i) => (
                 <li key={i}>
-                  <Button
-                    variant={item.active ? "default" : "ghost"}
-                    className="w-full justify-start"
-                  >
+                  <Button variant={item.active ? "default" : "ghost"} className="w-full justify-start">
                     {item.icon}
                     <span className="ml-2">{item.label}</span>
                   </Button>
@@ -599,10 +655,7 @@ function DashBoard() {
           </nav>
 
           <div className="p-4 border-t mt-auto">
-            <div className="flex items-center justify-between">
-              <ThemeToggle />
-              {!isConnected && <ConnectButton />}
-            </div>
+            <div className="flex items-center justify-between">{!isConnected && <ConnectButton />}</div>
           </div>
         </aside>
 
@@ -612,11 +665,7 @@ function DashBoard() {
           <header className="sticky top-0 z-10 backdrop-blur-md bg-background/80 border-b">
             <div className="container flex h-16 items-center justify-between px-4">
               <div className="flex items-center gap-2 lg:hidden">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsMobileMenuOpen(true)}
-                >
+                <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(true)}>
                   <Menu className="h-5 w-5" />
                 </Button>
                 <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
@@ -627,9 +676,7 @@ function DashBoard() {
                 <h2 className="text-xl font-bold">Dashboard</h2>
               </div>
               <div className="flex items-center gap-4">
-                <div className="hidden md:flex items-center gap-2">
-                  <ThemeToggle />
-                </div>
+                <DashboardSignupIntegration className="hidden md:flex" />
                 <ConnectButton />
               </div>
             </div>
@@ -656,23 +703,13 @@ function DashBoard() {
                     <CardContent className="pt-4">
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8 bg-primary/10">
-                          <AvatarFallback>
-                            {address?.slice(2, 4)}
-                          </AvatarFallback>
+                          <AvatarFallback>{address?.slice(2, 4)}</AvatarFallback>
                         </Avatar>
-                        <p className="text-xl font-bold">
-                          {formatAddress(address)}
-                        </p>
+                        <p className="text-xl font-bold">{formatAddress(address)}</p>
                       </div>
                       {chain && (
-                        <Badge
-                          variant={
-                            chain?.id === sepolia.id ? "default" : "destructive"
-                          }
-                          className="mt-2"
-                        >
-                          {chains.find((c) => c.id === chain?.id)?.name ||
-                            "Unknown Network"}
+                        <Badge variant={chain?.id === sepolia.id ? "default" : "destructive"} className="mt-2">
+                          {chains.find((c) => c.id === chain?.id)?.name || "Unknown Network"}
                         </Badge>
                       )}
                     </CardContent>
@@ -717,37 +754,27 @@ function DashBoard() {
                         <div className="relative h-8 w-8 rounded-full bg-primary/30 flex items-center justify-center">
                           <Trophy className="h-4 w-4 text-primary" />
                         </div>
-                        <p className="text-xl font-bold">67% Win Rate</p>
+                        <p className="text-xl font-bold">{winRate}% Win Rate</p>
                       </div>
                       <div className="mt-2">
                         <div className="flex justify-between text-xs mb-1">
-                          <span>10 wins</span>
-                          <span>15 total</span>
+                          <span>{predictions.filter((p) => p.status === "won").length} wins</span>
+                          <span>{predictions.filter((p) => p.status !== "pending").length} total</span>
                         </div>
-                        <Progress value={67} className="h-2" />
+                        <Progress value={winRate} className="h-2" />
                       </div>
                     </CardContent>
                   </Card>
                 </motion.div>
 
                 {/* Tabs for Upcoming Matches and Your Predictions */}
-                <Tabs
-                  defaultValue="upcoming"
-                  className="mb-6"
-                  onValueChange={setActiveTab}
-                >
+                <Tabs defaultValue="upcoming" className="mb-6" onValueChange={setActiveTab}>
                   <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger
-                      value="upcoming"
-                      className="flex items-center gap-2"
-                    >
+                    <TabsTrigger value="upcoming" className="flex items-center gap-2">
                       <Calendar className="h-4 w-4" />
                       Upcoming Matches
                     </TabsTrigger>
-                    <TabsTrigger
-                      value="predictions"
-                      className="flex items-center gap-2"
-                    >
+                    <TabsTrigger value="predictions" className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4" />
                       Your Predictions
                     </TabsTrigger>
@@ -758,14 +785,17 @@ function DashBoard() {
                     <Card className="overflow-hidden border-primary/20">
                       <CardHeader className="bg-primary/5">
                         <CardTitle>Upcoming Matches</CardTitle>
-                        <CardDescription>
-                          Swipe or use arrows to navigate matches
-                        </CardDescription>
+                        <CardDescription>Swipe or use arrows to navigate matches</CardDescription>
                       </CardHeader>
                       <CardContent className="relative p-0">
                         {isLoading ? (
                           <div className="p-6">
                             <Skeleton className="h-64 w-full" />
+                          </div>
+                        ) : matches.length === 0 ? (
+                          <div className="p-6 flex flex-col items-center justify-center">
+                            <Cricket className="h-12 w-12 text-muted-foreground mb-4" />
+                            <p className="text-muted-foreground text-center">No upcoming matches found</p>
                           </div>
                         ) : (
                           <div className="relative min-h-[300px]">
@@ -782,31 +812,17 @@ function DashBoard() {
                                   <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-4">
                                       <img
-                                        src={
-                                          getTeamLogo(
-                                            matches[currentMatchIndex]?.teamA
-                                          ) || "/placeholder.svg"
-                                        }
+                                        src={getTeamLogo(matches[currentMatchIndex]?.teamA) || "/placeholder.svg"}
                                         alt={matches[currentMatchIndex].teamA}
                                         className="h-auto max-h-20"
                                       />
-                                      <span className="text-xl font-bold">
-                                        {matches[currentMatchIndex].teamA}
-                                      </span>
+                                      <span className="text-xl font-bold">{matches[currentMatchIndex].teamA}</span>
                                     </div>
-                                    <span className="text-xl font-bold">
-                                      vs
-                                    </span>
+                                    <span className="text-xl font-bold">vs</span>
                                     <div className="flex items-center gap-4">
-                                      <span className="text-xl font-bold">
-                                        {matches[currentMatchIndex].teamB}
-                                      </span>
+                                      <span className="text-xl font-bold">{matches[currentMatchIndex].teamB}</span>
                                       <img
-                                        src={
-                                          getTeamLogo(
-                                            matches[currentMatchIndex].teamB
-                                          ) || "/placeholder.svg"
-                                        }
+                                        src={getTeamLogo(matches[currentMatchIndex].teamB) || "/placeholder.svg"}
                                         alt={matches[currentMatchIndex].teamB}
                                         className="h-auto max-h-20"
                                       />
@@ -815,17 +831,9 @@ function DashBoard() {
 
                                   <div className="flex items-center gap-2 mb-6 text-muted-foreground">
                                     <Calendar className="h-4 w-4" />
-                                    <span>
-                                      {formatDate(
-                                        matches[currentMatchIndex].matchDate
-                                      )}
-                                    </span>
+                                    <span>{formatDate(matches[currentMatchIndex].matchDate)}</span>
                                     <Clock className="h-4 w-4 ml-2" />
-                                    <span>
-                                      {getTimeRemaining(
-                                        matches[currentMatchIndex].matchDate
-                                      )}
-                                    </span>
+                                    <span>{getTimeRemaining(matches[currentMatchIndex].matchDate)}</span>
                                   </div>
 
                                   <div className="flex justify-center">
@@ -833,11 +841,7 @@ function DashBoard() {
                                       whileHover={{ scale: 1.05 }}
                                       whileTap={{ scale: 0.95 }}
                                       className="bg-primary text-primary-foreground px-6 py-2 rounded-full font-medium flex items-center gap-2"
-                                      onClick={() =>
-                                        setSelectedMatch(
-                                          matches[currentMatchIndex]
-                                        )
-                                      }
+                                      onClick={() => setSelectedMatch(matches[currentMatchIndex])}
                                     >
                                       View Details & Predict
                                       <ArrowRight className="h-4 w-4" />
@@ -851,11 +855,7 @@ function DashBoard() {
                               variant="outline"
                               size="icon"
                               className="absolute top-1/2 left-2 transform -translate-y-1/2 rounded-full h-10 w-10 bg-background/80 backdrop-blur-sm"
-                              onClick={() =>
-                                setCurrentMatchIndex((prev) =>
-                                  prev > 0 ? prev - 1 : matches.length - 1
-                                )
-                              }
+                              onClick={() => setCurrentMatchIndex((prev) => (prev > 0 ? prev - 1 : matches.length - 1))}
                             >
                               <ChevronLeft className="h-4 w-4" />
                             </Button>
@@ -863,11 +863,7 @@ function DashBoard() {
                               variant="outline"
                               size="icon"
                               className="absolute top-1/2 right-2 transform -translate-y-1/2 rounded-full h-10 w-10 bg-background/80 backdrop-blur-sm"
-                              onClick={() =>
-                                setCurrentMatchIndex((prev) =>
-                                  prev < matches.length - 1 ? prev + 1 : 0
-                                )
-                              }
+                              onClick={() => setCurrentMatchIndex((prev) => (prev < matches.length - 1 ? prev + 1 : 0))}
                             >
                               <ChevronRight className="h-4 w-4" />
                             </Button>
@@ -878,9 +874,8 @@ function DashBoard() {
                         <div className="flex justify-between items-center w-full">
                           <span className="text-sm text-muted-foreground">
                             {!isLoading &&
-                              `${currentMatchIndex + 1} of ${
-                                matches.length
-                              } matches`}
+                              matches.length > 0 &&
+                              `${currentMatchIndex + 1} of ${matches.length} matches`}
                           </span>
                           <div className="flex gap-1">
                             {!isLoading &&
@@ -888,9 +883,7 @@ function DashBoard() {
                                 <div
                                   key={idx}
                                   className={`h-2 w-2 rounded-full cursor-pointer ${
-                                    idx === currentMatchIndex
-                                      ? "bg-primary"
-                                      : "bg-primary/30"
+                                    idx === currentMatchIndex ? "bg-primary" : "bg-primary/30"
                                   }`}
                                   onClick={() => setCurrentMatchIndex(idx)}
                                 />
@@ -906,13 +899,17 @@ function DashBoard() {
                     <Card className="overflow-hidden border-primary/20">
                       <CardHeader className="bg-primary/5">
                         <CardTitle>Your Predictions</CardTitle>
-                        <CardDescription>
-                          Track your recent predictions and rewards
-                        </CardDescription>
+                        <CardDescription>Track your recent predictions and rewards</CardDescription>
                       </CardHeader>
                       <CardContent className="p-0">
                         <ScrollArea className="h-[400px]">
-                          {predictions.length > 0 ? (
+                          {isLoadingBets ? (
+                            <div className="p-4 space-y-4">
+                              <Skeleton className="h-20 w-full" />
+                              <Skeleton className="h-20 w-full" />
+                              <Skeleton className="h-20 w-full" />
+                            </div>
+                          ) : predictions.length > 0 ? (
                             <div className="divide-y">
                               {predictions.map((prediction) => (
                                 <motion.div
@@ -924,27 +921,22 @@ function DashBoard() {
                                 >
                                   <div className="flex justify-between items-start mb-2">
                                     <div>
-                                      <h3 className="font-medium">
-                                        {prediction.match}
-                                      </h3>
-                                      <p className="text-sm text-muted-foreground">
-                                        {prediction.question}
-                                      </p>
+                                      <h3 className="font-medium">{prediction.match}</h3>
+                                      <p className="text-sm text-muted-foreground">{prediction.question}</p>
                                     </div>
                                     <Badge
                                       variant="outline"
                                       className={`${getStatusColor(
-                                        prediction.status
-                                      )} text-white`}
+                                        prediction.status,
+                                      )} text-white flex items-center gap-1`}
                                     >
+                                      {getStatusIcon(prediction.status)}
                                       {getStatusText(prediction.status)}
                                     </Badge>
                                   </div>
                                   <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
-                                      <Badge variant="secondary">
-                                        {prediction.selectedOption}
-                                      </Badge>
+                                      <Badge variant="secondary">{prediction.selectedOption}</Badge>
                                       <span className="text-xs text-muted-foreground">
                                         {formatDate(prediction.date)}
                                       </span>
@@ -952,9 +944,7 @@ function DashBoard() {
                                     {prediction.reward && (
                                       <div className="flex items-center gap-1 text-green-500">
                                         <Coins className="h-3 w-3" />
-                                        <span className="font-medium">
-                                          +{prediction.reward} CPT
-                                        </span>
+                                        <span className="font-medium">+{prediction.reward} CPT</span>
                                       </div>
                                     )}
                                   </div>
@@ -981,74 +971,79 @@ function DashBoard() {
                 <div className="hidden lg:block mt-6">
                   <h2 className="text-xl font-bold mb-4">Trending Matches</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {!isLoading &&
-                      matches.map((match, idx) => (
-                        <Card
-                          key={idx}
-                          className="overflow-hidden hover:border-primary/50 transition-all duration-300 hover:shadow-md"
-                        >
-                          <CardHeader className="bg-primary/5 pb-2">
-                            <CardTitle className="text-base flex items-center justify-between">
-                              <span>
-                                {match.teamA} vs {match.teamB}
-                              </span>
-                              <Badge variant="outline" className="ml-2">
-                                {getTimeRemaining(match.matchDate)}
-                              </Badge>
-                            </CardTitle>
-                            <CardDescription className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {formatDate(match.matchDate)}
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent className="p-4">
-                            <div className="text-sm text-muted-foreground mb-2">
-                              {questions?.length > 0} prediction questions
-                              available
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="flex -space-x-2">
-                                      <Avatar className="border-2 border-background h-8 w-8">
-                                        <AvatarFallback className="bg-primary/20 text-xs">
-                                          {match.teamA.slice(0, 2)}
-                                        </AvatarFallback>
-                                      </Avatar>
-                                      <Avatar className="border-2 border-background h-8 w-8">
-                                        <AvatarFallback className="bg-primary/20 text-xs">
-                                          {match.teamB.slice(0, 2)}
-                                        </AvatarFallback>
-                                      </Avatar>
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>
-                                      {match.teamA} vs {match.teamB}
-                                    </p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                              <div className="text-sm">
-                                <span className="text-primary font-medium">
-                                  250+
-                                </span>{" "}
-                                users predicting
+                    {!isLoading && matches.length > 0
+                      ? matches.map((match, idx) => (
+                          <Card
+                            key={idx}
+                            className="overflow-hidden hover:border-primary/50 transition-all duration-300 hover:shadow-md"
+                          >
+                            <CardHeader className="bg-primary/5 pb-2">
+                              <CardTitle className="text-base flex items-center justify-between">
+                                <span>
+                                  {match.teamA} vs {match.teamB}
+                                </span>
+                                <Badge variant="outline" className="ml-2">
+                                  {getTimeRemaining(match.matchDate)}
+                                </Badge>
+                              </CardTitle>
+                              <CardDescription className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {formatDate(match.matchDate)}
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent className="p-4">
+                              <div className="text-sm text-muted-foreground mb-2">
+                                {match._id === selectedMatch?._id && questions.length > 0
+                                  ? `${questions.length} prediction questions available`
+                                  : "Prediction questions available"}
                               </div>
-                            </div>
-                          </CardContent>
-                          <CardFooter className="bg-muted/20 p-3">
-                            <Button
-                              variant="ghost"
-                              className="w-full"
-                              onClick={() => setSelectedMatch(match)}
-                            >
-                              View Details
-                            </Button>
-                          </CardFooter>
-                        </Card>
-                      ))}
+                              <div className="flex items-center gap-2">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex -space-x-2">
+                                        <Avatar className="border-2 border-background h-8 w-8">
+                                          <AvatarFallback className="bg-primary/20 text-xs">
+                                            {match.teamA.slice(0, 2)}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <Avatar className="border-2 border-background h-8 w-8">
+                                          <AvatarFallback className="bg-primary/20 text-xs">
+                                            {match.teamB.slice(0, 2)}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>
+                                        {match.teamA} vs {match.teamB}
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                                <div className="text-sm">
+                                  <span className="text-primary font-medium">
+                                    {Math.floor(Math.random() * 300) + 50}+
+                                  </span>{" "}
+                                  users predicting
+                                </div>
+                              </div>
+                            </CardContent>
+                            <CardFooter className="bg-muted/20 p-3">
+                              <Button variant="ghost" className="w-full" onClick={() => setSelectedMatch(match)}>
+                                View Details
+                              </Button>
+                            </CardFooter>
+                          </Card>
+                        ))
+                      : !isLoading && (
+                          <div className="col-span-3 flex flex-col items-center justify-center p-8">
+                            <Cricket className="h-16 w-16 text-muted-foreground mb-4" />
+                            <p className="text-muted-foreground text-center">
+                              No trending matches available at the moment.
+                            </p>
+                          </div>
+                        )}
                   </div>
                 </div>
 
@@ -1058,38 +1053,26 @@ function DashBoard() {
                   <Card>
                     <CardHeader className="bg-primary/5">
                       <CardTitle>Weekly Leaderboard</CardTitle>
-                      <CardDescription>
-                        Top performers based on prediction accuracy
-                      </CardDescription>
+                      <CardDescription>Top performers based on prediction accuracy</CardDescription>
                     </CardHeader>
                     <CardContent className="p-0">
                       <div className="divide-y">
                         {[1, 2, 3, 4, 5].map((i) => (
-                          <div
-                            key={i}
-                            className="flex items-center justify-between p-4"
-                          >
+                          <div key={i} className="flex items-center justify-between p-4">
                             <div className="flex items-center gap-3">
                               <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 font-bold">
                                 {i}
                               </div>
                               <Avatar className="h-10 w-10 border-2 border-primary/20">
-                                <AvatarFallback>
-                                  {String.fromCharCode(64 + i)}
-                                </AvatarFallback>
+                                <AvatarFallback>{String.fromCharCode(64 + i)}</AvatarFallback>
                               </Avatar>
                               <div>
                                 <p className="font-medium">User{i}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {90 - i * 5}% accuracy
-                                </p>
+                                <p className="text-xs text-muted-foreground">{90 - i * 5}% accuracy</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Badge
-                                variant="outline"
-                                className="bg-primary/10"
-                              >
+                              <Badge variant="outline" className="bg-primary/10">
                                 <Flame className="h-3 w-3 mr-1 text-primary" />
                                 {10 - i} streak
                               </Badge>
@@ -1126,12 +1109,9 @@ function DashBoard() {
                     >
                       <Cricket className="h-12 w-12 text-primary" />
                     </motion.div>
-                    <CardTitle className="text-2xl">
-                      Welcome to Cricket Prophet
-                    </CardTitle>
+                    <CardTitle className="text-2xl">Welcome to Cricket Prophet</CardTitle>
                     <CardDescription>
-                      Connect your wallet to start making predictions on cricket
-                      matches and earn rewards.
+                      Connect your wallet to start making predictions on cricket matches and earn rewards.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="p-6">
@@ -1142,9 +1122,7 @@ function DashBoard() {
                         </div>
                         <div>
                           <h3 className="font-medium">Make Predictions</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Predict outcomes of cricket matches
-                          </p>
+                          <p className="text-sm text-muted-foreground">Predict outcomes of cricket matches</p>
                         </div>
                       </div>
 
@@ -1154,9 +1132,7 @@ function DashBoard() {
                         </div>
                         <div>
                           <h3 className="font-medium">Earn Rewards</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Win CPT tokens for correct predictions
-                          </p>
+                          <p className="text-sm text-muted-foreground">Win CPT tokens for correct predictions</p>
                         </div>
                       </div>
 
@@ -1166,18 +1142,13 @@ function DashBoard() {
                         </div>
                         <div>
                           <h3 className="font-medium">Track Performance</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Monitor your prediction history and stats
-                          </p>
+                          <p className="text-sm text-muted-foreground">Monitor your prediction history and stats</p>
                         </div>
                       </div>
                     </div>
                   </CardContent>
                   <CardFooter className="flex justify-center p-6 bg-primary/5">
-                    <motion.div
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
+                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                       <ConnectButton />
                     </motion.div>
                   </CardFooter>
@@ -1189,15 +1160,12 @@ function DashBoard() {
       </div>
 
       {/* Match Detail Modal */}
-      <Dialog
-        open={!!selectedMatch}
-        onOpenChange={(open) => !open && setSelectedMatch(null)}
-      >
+      <Dialog open={!!selectedMatch} onOpenChange={(open) => !open && setSelectedMatch(null)}>
         <DialogContent className="max-w-4xl overflow-hidden">
           <DialogHeader className="bg-primary/5 p-4 rounded-t-lg">
             <DialogTitle className="text-2xl flex items-center justify-center gap-4">
               <img
-                src={selectedMatch ? getTeamLogo(selectedMatch.teamA) : ""}
+                src={selectedMatch ? getTeamLogo(selectedMatch.teamA) : "/placeholder.svg"}
                 alt={selectedMatch?.teamA}
                 className="h-8 w-8 rounded-full bg-primary/10"
               />
@@ -1205,7 +1173,7 @@ function DashBoard() {
                 {selectedMatch?.teamA} vs {selectedMatch?.teamB}
               </span>
               <img
-                src={selectedMatch ? getTeamLogo(selectedMatch.teamB) : ""}
+                src={selectedMatch ? getTeamLogo(selectedMatch.teamB) : "/placeholder.svg"}
                 alt={selectedMatch?.teamB}
                 className="h-8 w-8 rounded-full bg-primary/10"
               />
@@ -1217,7 +1185,6 @@ function DashBoard() {
           </DialogHeader>
           <ScrollArea className="max-h-[60vh]">
             <div className="space-y-4 p-6">
-              {/* 8. Add a loading state for the questions in the match detail modal */}
               {isQuestionLoading ? (
                 <div className="space-y-4">
                   <Skeleton className="h-32 w-full rounded-lg" />
@@ -1226,15 +1193,10 @@ function DashBoard() {
                 </div>
               ) : selectedMatch && questions && questions.length > 0 ? (
                 questions.map((question) => (
-                  <Card
-                    key={question._id}
-                    className="overflow-hidden border-primary/20"
-                  >
+                  <Card key={question._id} className="overflow-hidden border-primary/20">
                     <CardHeader className="bg-primary/5">
                       <div className="flex justify-between items-center">
-                        <CardTitle className="text-lg">
-                          {question.question}
-                        </CardTitle>
+                        <CardTitle className="text-lg">{question.question}</CardTitle>
                         <Badge variant="outline" className="ml-2">
                           {getTimeRemaining(question.closedAt)}
                         </Badge>
@@ -1246,65 +1208,112 @@ function DashBoard() {
                     </CardHeader>
                     <CardContent className="p-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                        {question.options.map((option, index) => (
-                          <motion.div
-                            key={index}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            onClick={() =>
-                              setSelectedOption({
-                                ...selectedOption,
-                                [question._id]: option,
-                              })
-                            }
-                            className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                              selectedOption[question._id] === option
-                                ? "border-primary bg-primary/10"
-                                : "border-muted hover:border-primary/50"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div
-                                className={`h-4 w-4 rounded-full border ${
-                                  selectedOption[question._id] === option
-                                    ? "border-primary bg-primary"
-                                    : "border-muted-foreground"
-                                }`}
-                              >
-                                {selectedOption[question._id] === option && (
-                                  <div className="h-2 w-2 m-[3px] rounded-full bg-white" />
+                        {question.options.map((option, index) => {
+                          // Check if this is the user's previous selection
+                          const isUserPreviousSelection = userBets.some(
+                            (bet) => bet.question._id === question._id && bet.option === option,
+                          )
+
+                          return (
+                            <motion.div
+                              key={index}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              onClick={() => {
+                                // Only allow selection if question is still active
+                                if (question.isActive) {
+                                  setSelectedOption({
+                                    ...selectedOption,
+                                    [question._id]: option,
+                                  })
+                                }
+                              }}
+                              className={`p-3 rounded-lg border-2 ${question.isActive ? "cursor-pointer" : "cursor-not-allowed opacity-70"} transition-all ${
+                                selectedOption[question._id] === option
+                                  ? "border-primary bg-primary/10"
+                                  : isUserPreviousSelection
+                                    ? "border-green-500 bg-green-50 dark:bg-green-900/20"
+                                    : "border-muted hover:border-primary/50"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className={`h-4 w-4 rounded-full border ${
+                                    selectedOption[question._id] === option
+                                      ? "border-primary bg-primary"
+                                      : isUserPreviousSelection
+                                        ? "border-green-500 bg-green-500"
+                                        : "border-muted-foreground"
+                                  }`}
+                                >
+                                  {(selectedOption[question._id] === option || isUserPreviousSelection) && (
+                                    <div className="h-2 w-2 m-[3px] rounded-full bg-white" />
+                                  )}
+                                </div>
+                                <span className="font-medium">{option}</span>
+                                {isUserPreviousSelection && (
+                                  <Badge
+                                    variant="outline"
+                                    className="ml-auto text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
+                                  >
+                                    Your Pick
+                                  </Badge>
                                 )}
                               </div>
-                              <span className="font-medium">{option}</span>
-                            </div>
-                          </motion.div>
-                        ))}
+                            </motion.div>
+                          )
+                        })}
                       </div>
+                      {/* Show if question has an answer already */}
+                      {question.answer && (
+                        <div className="mt-4 p-3 rounded-lg bg-primary/5 border border-primary/10">
+                          <div className="flex items-center gap-2">
+                            <Check className="h-4 w-4 text-green-500" />
+                            <span className="font-medium">Correct Answer: {question.answer}</span>
+                          </div>
+                        </div>
+                      )}
                     </CardContent>
-                    {/* 7. Update the CardFooter in the match detail modal to use per-question loading state */}
                     <CardFooter className="bg-primary/5 p-4 flex justify-end">
-                      <Button
-                        onClick={() => handleBet(question._id)}
-                        disabled={
-                          !selectedOption[question._id] ||
-                          isPlacingBet[question._id]
-                        }
-                        className="relative overflow-hidden"
-                      >
-                        {isPlacingBet[question._id] ? (
-                          <>
-                            <span className="opacity-0">Place Prediction</span>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <Loader2 className="h-5 w-5 animate-spin" />
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            Place Prediction
-                            <Sparkles className="ml-2 h-4 w-4" />
-                          </>
-                        )}
-                      </Button>
+                      {userBets.some((bet) => bet.question._id === question._id) ? (
+                        <Button
+                          variant="outline"
+                          className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800"
+                          disabled
+                        >
+                          Prediction Submitted
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => handleBet(question._id)}
+                          disabled={
+                            !selectedOption[question._id] ||
+                            isPlacingBet[question._id] ||
+                            !question.isActive ||
+                            !!question.answer
+                          }
+                          className="relative overflow-hidden"
+                        >
+                          {isPlacingBet[question._id] ? (
+                            <>
+                              <span className="opacity-0">Place Prediction</span>
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <Loader2 className="h-5 w-5 animate-spin" />
+                              </div>
+                            </>
+                          ) : question.answer ? (
+                            <>
+                              Prediction Closed
+                              <AlertTriangle className="ml-2 h-4 w-4" />
+                            </>
+                          ) : (
+                            <>
+                              Place Prediction
+                              <Sparkles className="ml-2 h-4 w-4" />
+                            </>
+                          )}
+                        </Button>
+                      )}
                     </CardFooter>
                   </Card>
                 ))
@@ -1335,35 +1344,23 @@ function DashBoard() {
               Network Change Required
             </DialogTitle>
             <DialogDescription>
-              Cricket Prophet requires the Sepolia test network. Please switch
-              your network to continue.
+              Cricket Prophet requires the Sepolia test network. Please switch your network to continue.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col items-center gap-4 py-4">
             <div className="flex items-center gap-4 w-full">
-              <Badge
-                variant="outline"
-                className="text-muted-foreground flex-1 justify-center py-2"
-              >
-                Current:{" "}
-                {chains.find((c) => c.id === chain?.id)?.name ||
-                  "Unknown Network"}
+              <Badge variant="outline" className="text-muted-foreground flex-1 justify-center py-2">
+                Current: {chains.find((c) => c.id === chain?.id)?.name || "Unknown Network"}
               </Badge>
               <ArrowRight className="h-6 w-6 text-muted-foreground animate-pulse" />
-              <Badge className="flex-1 justify-center py-2 bg-primary">
-                Required: Sepolia
-              </Badge>
+              <Badge className="flex-1 justify-center py-2 bg-primary">Required: Sepolia</Badge>
             </div>
             <div className="text-sm text-muted-foreground text-center">
-              Switching networks will allow you to interact with the Cricket
-              Prophet platform and place predictions.
+              Switching networks will allow you to interact with the Cricket Prophet platform and place predictions.
             </div>
           </div>
           <DialogFooter className="flex justify-center sm:justify-center gap-2">
-            <Button
-              onClick={handleSwitchToSepolia}
-              className="w-full sm:w-auto"
-            >
+            <Button onClick={handleSwitchToSepolia} className="w-full sm:w-auto">
               Switch to Sepolia
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
@@ -1371,27 +1368,56 @@ function DashBoard() {
         </DialogContent>
       </Dialog>
 
-      {/* 9. Add a modal overlay to prevent interactions during submission */}
-      {Object.values(isPlacingBet).some(Boolean) && (
+      {/* Verification Dialog */}
+      <Dialog open={showVerificationDialog} onOpenChange={setShowVerificationDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Account Verification Required
+            </DialogTitle>
+            <DialogDescription>You need to complete the sign-up process before making predictions.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 py-4">
+            <Card className="p-4 bg-amber-50 text-amber-800 dark:bg-amber-900/20 dark:text-amber-200 border border-amber-200 dark:border-amber-800 rounded-lg w-full">
+              <p className="text-sm">
+                To ensure fair play and prevent abuse, we require all users to complete a simple verification process
+                before making predictions.
+              </p>
+            </Card>
+          </div>
+          <DialogFooter className="flex justify-between sm:justify-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowVerificationDialog(false)
+                handleVerificationComplete(false)
+              }}
+            >
+              Cancel
+            </Button>
+            <DashboardSignupIntegration className="w-full" />
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal overlay during submission */}
+      {(Object.values(isPlacingBet).some(Boolean) || isPending) && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
           <Card className="w-[300px]">
             <CardHeader>
-              <CardTitle className="text-center">
-                Processing Prediction
-              </CardTitle>
+              <CardTitle className="text-center">Processing Prediction</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col items-center">
               <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-              <p className="text-center text-muted-foreground">
-                Please wait while we process your prediction...
-              </p>
+              <p className="text-center text-muted-foreground">Please wait while we process your prediction...</p>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* 10. Add the Sonner Toaster component at the end of the return statement, just before the closing div */}
       <Toaster position="top-right" richColors />
     </div>
-  );
+  )
 }
+

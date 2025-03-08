@@ -3,10 +3,9 @@ import { connectDB } from "@/lib/db";
 import Question from "@/lib/model/Question";
 import Match from "@/lib/model/Match";
 
-export async function GET(req:NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-
-    const {searchParams} = new URL(req.url);
+    const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
     await connectDB();
@@ -24,8 +23,6 @@ export async function GET(req:NextRequest) {
     }
 
     const questions = await Question.find({ matchId: id });
-
-    console.log(questions)
 
     return NextResponse.json({ questions }, { status: 200 });
   } catch (error) {

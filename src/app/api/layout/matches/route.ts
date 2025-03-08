@@ -6,11 +6,7 @@ export async function GET() {
   try {
     await connectDB();
 
-    console.log("Fetching all matches");
-    
-    // Fetch all matches
     const matches = await Match.find({});
-    console.log("param");
 
     return NextResponse.json({ matches }, { status: 200 });
   } catch (error) {

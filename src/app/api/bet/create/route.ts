@@ -20,13 +20,15 @@ export async function POST(request: NextRequest) {
     let user = await User.findOne({ address });
 
     if (!user) {
-      await User.create({ address });
+      return NextResponse.json(
+        { message: "User not found" },
+        { status: 404 }
+      );
     }
 
     user = await User.findOne({
       address,
     });
-    console.log(questionId);
     const question = await Question.findById(questionId);
     if (!question) {
       return NextResponse.json(
@@ -37,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     const existBet = await Bet.find({question:question._id,user:user._id});
 
-    if(existBet && existBet.length==1)
+    if(existBet && existBet.length>=1)
     {
       return NextResponse.json(
         { message: "Already bet" },

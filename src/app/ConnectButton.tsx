@@ -105,7 +105,7 @@ export function ConnectButton() {
     return `${chain.blockExplorers.default.url}/address/${address}`;
   };
 
-  // If connected, show the account dropdown
+  // If connected, show the account dropdow
   if (isConnected && address) {
     return (
       <TooltipProvider>

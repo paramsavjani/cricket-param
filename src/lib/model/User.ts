@@ -6,6 +6,7 @@ interface IUser extends Document {
   provider: string;
   createdAt: Date;
   updatedAt: Date;
+  username: string;
   address: string;
 }
 
@@ -14,6 +15,8 @@ export type { IUser };
 const UserSchema = new Schema<IUser>(
   {
     name: { type: String },
+    username: { type: String, unique: true },
+    email: { type: String, unique: true },
     provider: { type: String },
     address: { type: String, required: true, unique: true },
   },
