@@ -57,7 +57,7 @@ export default function SignupForm() {
   async function handleClaimTokens() {
     try {
       await writeContractAsync({
-        address: "0x66f8ECD191AF7F90bc4Fe82629d525e5AB9FDf4C",
+        address: "0x16B81D58b7312B452d8198C57629586260Db0ee0",
         abi: abi,
         functionName: "claimInitialTokens",
       })
