@@ -343,11 +343,11 @@ export default function AdminDashboard() {
 
     try {
       const response = await fetch(`/api/admin/questions/${editingQuestion._id}`, {
-        method: "PUT",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(editingQuestion),
+        body: JSON.stringify({ id: editingQuestion._id, ...editingQuestion }),
       })
 
       if (!response.ok) {
@@ -387,11 +387,11 @@ export default function AdminDashboard() {
 
     try {
       const response = await fetch(`/api/admin/questions/${answerQuestion._id}/answer`, {
-        method: "PUT",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ answer: selectedAnswer }),
+        body: JSON.stringify({ id: answerQuestion._id, answer: selectedAnswer }),
       })
 
       if (!response.ok) {

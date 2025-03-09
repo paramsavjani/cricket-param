@@ -2,11 +2,11 @@ import { type NextRequest, NextResponse } from "next/server"
 import { connectDB } from "@/lib/db"
 import Question from "@/lib/model/Question"
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest) {
   try {
     await connectDB()
     const data = await req.json()
-    const questionId = params.id
+    const questionId = data.id
 
     const updatedQuestion = await Question.findByIdAndUpdate(
       questionId,
