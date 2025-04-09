@@ -27,8 +27,6 @@ export async function GET(req: NextRequest) {
     // Get all bets for this user
     const bets = await Bet.find({ user: user._id })
 
-    console.log(bets)
-
     if (bets.length === 0) {
       return NextResponse.json({ bets: [] }, { status: 200 })
     }
@@ -55,8 +53,6 @@ export async function GET(req: NextRequest) {
         updatedAt: bet.updatedAt,
       }
     })
-
-    console.log(betsWithDetails)
 
     return NextResponse.json({ bets: betsWithDetails }, { status: 200 })
   } catch (error) {

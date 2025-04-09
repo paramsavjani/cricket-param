@@ -6,6 +6,8 @@ interface IMatch extends mongoose.Document {
   matchDate: Date;
   createdAt: Date;
   updatedAt: Date;
+  merkleRoot: string;
+  rewardsCount: number;
 }
 
 const MatchSchema = new mongoose.Schema<IMatch>(
@@ -13,6 +15,8 @@ const MatchSchema = new mongoose.Schema<IMatch>(
     teamA: { type: String, required: true },
     teamB: { type: String, required: true },
     matchDate: { type: Date, required: true },
+    merkleRoot: { type: String, required: false },
+    rewardsCount: { type: Number, required: false },
   },
   { timestamps: true }
 );

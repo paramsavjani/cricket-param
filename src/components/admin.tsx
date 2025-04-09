@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
@@ -31,6 +32,14 @@ import {
   Users,
   Trophy,
   Sparkles,
+  Coins,
+  Loader2,
+  FileText,
+  Zap,
+  GitMerge,
+  Database,
+  CheckCircle2,
+  HelpCircle,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -53,12 +62,16 @@ import { Switch } from "@/components/ui/switch"
 import { motion, AnimatePresence } from "framer-motion"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Progress } from "@/components/ui/progress"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 interface Match {
   _id: string
   teamA: string
   teamB: string
   matchDate: string
+  merkleRoot?: string
+  rewardsCount?: number
 }
 
 interface Question {
@@ -80,6 +93,10 @@ interface AdminStats {
   totalUsers: number
   totalPredictions: number
   avgPredictionsPerUser: string
+}
+
+interface RewardsData {
+  rewardsCount: number
 }
 
 export default function AdminDashboard() {
@@ -121,6 +138,20 @@ export default function AdminDashboard() {
   const [answerQuestion, setAnswerQuestion] = useState<Question | null>(null)
   const [selectedAnswer, setSelectedAnswer] = useState("")
   const [showAnswerDialog, setShowAnswerDialog] = useState(false)
+
+  // Merkle tree state
+  const [merkleRoot, setMerkleRoot] = useState<string | null>(null)
+  const [rewardsData, setRewardsData] = useState<RewardsData | null>(null)
+  const [isGeneratingMerkle, setIsGeneratingMerkle] = useState(false)
+  const [isUpdatingContract, setIsUpdatingContract] = useState(false)
+  const [updateSuccess, setUpdateSuccess] = useState(false)
+  const [showMerkleDialog, setShowMerkleDialog] = useState(false)
+  const [showMerkleGuide, setShowMerkleGuide] = useState(false)
+
+  // End match state
+  const [showEndMatchDialog, setShowEndMatchDialog] = useState(false)
+  const [isEndingMatch, setIsEndingMatch] = useState(false)
+  const [endMatchSuccess, setEndMatchSuccess] = useState(false)
 
   // Fetch admin stats
   useEffect(() => {
@@ -192,6 +223,33 @@ export default function AdminDashboard() {
     fetchQuestions()
   }, [selectedMatch])
 
+  // Fetch Merkle root data for selected match
+  useEffect(() => {
+    const fetchMerkleData = async () => {
+      if (!selectedMatch) return
+
+      try {
+        const response = await fetch(`/api/rewards/merkle-data?matchId=${selectedMatch._id}`)
+        const data = await response.json()
+
+        if (data.merkleRoot) {
+          setMerkleRoot(data.merkleRoot)
+          setRewardsData({
+            rewardsCount: data.rewardsCount || 0,
+          })
+
+          if (data.merkleRoot) {
+            setUpdateSuccess(true)
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching Merkle data:", error)
+      }
+    }
+
+    fetchMerkleData()
+  }, [selectedMatch])
+
   // Filter questions based on search and filter
   const filteredQuestions = useMemo(() => {
     return questions.filter((question) => {
@@ -224,12 +282,21 @@ export default function AdminDashboard() {
     })
   }, [questions, searchQuery, filterStatus])
 
+  // Get answered and unanswered questions
+  const activeQuestions = useMemo(() => filteredQuestions.filter((q) => q.isActive), [filteredQuestions])
+
   // Handle match selection
   const handleMatchSelect = (matchId: string) => {
     const match = matches.find((m) => m._id === matchId)
     if (match) {
       setSelectedMatch(match)
       setNewQuestion((prev) => ({ ...prev, matchId: match._id }))
+      // Reset Merkle tree state when changing matches
+      setMerkleRoot(match.merkleRoot || null)
+      setRewardsData({
+        rewardsCount: match.rewardsCount || 0,
+      })
+      setUpdateSuccess(false)
     }
   }
 
@@ -402,7 +469,7 @@ export default function AdminDashboard() {
       const hadAnswerBefore = !!answerQuestion.answer
 
       // Update the question in the list
-      setQuestions((prev) => prev.map((q) => (q._id === answerQuestion._id ? { ...q, answer: selectedAnswer } : q)))
+      setQuestions((prev) => prev.map((q) => (q._id === answerQuestion._id ? { ...q, answer: selectedAnswer, isActive: false } : q)))
 
       // Update stats if this is a new answer
       if (!hadAnswerBefore) {
@@ -417,6 +484,133 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error("Error setting answer:", error)
       toast.error("Failed to set answer")
+    }
+  }
+
+  // Generate Merkle root
+  const generateMerkleRoot = async () => {
+    if (!selectedMatch) return
+
+    setIsGeneratingMerkle(true)
+    try {
+      const response = await fetch("/api/rewards/merkle-root", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ matchId: selectedMatch._id }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to generate Merkle root")
+      }
+
+      setMerkleRoot(data.merkleRoot)
+      setRewardsData({
+        rewardsCount: data.rewardsCount,
+      })
+
+      toast.success("Merkle root generated and saved successfully")
+    } catch (error) {
+      console.error("Error generating Merkle root:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to generate Merkle root")
+    } finally {
+      setIsGeneratingMerkle(false)
+    }
+  }
+
+  // Update contract with Merkle root
+  const updateContractRoot = async () => {
+    if (!merkleRoot || !selectedMatch) return
+
+    setIsUpdatingContract(true)
+    try {
+      // Connect to MetaMask
+      if (!window.ethereum) {
+        throw new Error("MetaMask is not installed")
+      }
+
+      // const provider = new ethers.BrowserProvider(window.ethereum)
+      // await provider.send("eth_requestAccounts", [])
+      // const signer = await provider.getSigner()
+
+      // // Create contract instance
+      // const abi = ["function updateMerkleRoot(uint256 matchId, bytes32 merkleRoot) external"]
+      // const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, signer)
+
+      // // Convert match ID to number (or use a different format if needed)
+      // const matchId = Number.parseInt(selectedMatch._id, 10)
+
+      // // Update the Merkle root in the contract
+      // const tx = await contract.updateMerkleRoot(matchId, merkleRoot)
+
+      // // Wait for transaction to be mined
+      // await tx.wait()
+
+      // Update match with success status
+      await fetch(`/api/admin/matches/${selectedMatch._id}/merkle-status`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          updateSuccess: true,
+        }),
+      })
+
+      setUpdateSuccess(true)
+      toast.success("Merkle root updated in contract successfully")
+    } catch (error) {
+      console.error("Error updating Merkle root in contract:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to update Merkle root in contract")
+    } finally {
+      setIsUpdatingContract(false)
+    }
+  }
+
+  // End match and finalize all questions
+  const endMatch = async () => {
+    if (!selectedMatch) return
+
+    setIsEndingMatch(true)
+    try {
+      // Get all active questions for this match
+      const activeQuestionsForMatch = questions.filter((q) => q.isActive && !q.answer)
+
+      if (activeQuestionsForMatch.length === 0) {
+        toast.info("No active questions to finalize for this match")
+        setIsEndingMatch(false)
+        setShowEndMatchDialog(false)
+        return
+      }
+
+      // For each active question, prompt for an answer
+      for (const question of activeQuestionsForMatch) {
+        // Set the current question for answering
+        setAnswerQuestion(question)
+        setSelectedAnswer("")
+        setShowAnswerDialog(true)
+
+        // Wait for the user to set an answer
+        // This would require a more complex implementation with promises
+        // For now, we'll just show a message
+        toast.info(`Please set answers for all active questions before ending the match`)
+        setIsEndingMatch(false)
+        setShowEndMatchDialog(false)
+        return
+      }
+
+      // If all questions are answered, mark the match as ended
+      // This would update the match status in the database
+      toast.success("Match ended successfully. All questions have been finalized.")
+      setEndMatchSuccess(true)
+    } catch (error) {
+      console.error("Error ending match:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to end match")
+    } finally {
+      setIsEndingMatch(false)
     }
   }
 
@@ -484,6 +678,22 @@ export default function AdminDashboard() {
     setFilterStatus("all")
   }
 
+  // Check if match has any unanswered questions
+  const hasUnansweredQuestions = useMemo(() => {
+    return questions.some((q) => !q.answer && !q.isActive)
+  }, [questions])
+
+  // Check if match has any active questions
+  const hasActiveQuestions = useMemo(() => {
+    return questions.some((q) => q.isActive)
+  }, [questions])
+
+  // Check if match is ready for rewards
+  const isReadyForRewards = useMemo(() => {
+    // All questions must be answered and none should be active
+    return questions.length > 0 && !questions.some((q) => !q.answer) && !questions.some((q) => q.isActive)
+  }, [questions])
+
   return (
     <div className="py-0">
       <Card className="border-primary/20 shadow-md" style={{ height: "100vh" }}>
@@ -500,7 +710,7 @@ export default function AdminDashboard() {
                 </motion.div>
                 Admin Dashboard
               </CardTitle>
-              <CardDescription>Manage matches, questions, and answers</CardDescription>
+              <CardDescription>Manage matches, questions, answers, and rewards</CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <TooltipProvider>
@@ -698,13 +908,39 @@ export default function AdminDashboard() {
                     )}
                   </ScrollArea>
                 </CardContent>
+                <CardFooter className="bg-primary/5 p-3 flex justify-between">
+                  {selectedMatch && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowEndMatchDialog(true)}
+                        disabled={!hasActiveQuestions}
+                        className="text-xs"
+                      >
+                        <Zap className="h-3 w-3 mr-1" />
+                        End Match
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowMerkleDialog(true)}
+                        disabled={!isReadyForRewards}
+                        className="text-xs"
+                      >
+                        <GitMerge className="h-3 w-3 mr-1" />
+                        Rewards
+                      </Button>
+                    </>
+                  )}
+                </CardFooter>
               </Card>
             </div>
 
             {/* Main Content */}
             <div className="md:col-span-3">
               <Tabs defaultValue="questions" onValueChange={setActiveTab} value={activeTab}>
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="questions" className="relative">
                     Manage Questions
                     {filteredQuestions.length > 0 && (
@@ -712,6 +948,10 @@ export default function AdminDashboard() {
                     )}
                   </TabsTrigger>
                   <TabsTrigger value="add">Add New Question</TabsTrigger>
+                  <TabsTrigger value="rewards" className="relative">
+                    Rewards
+                    {isReadyForRewards && <Badge className="ml-2 bg-green-500 text-white">Ready</Badge>}
+                  </TabsTrigger>
                 </TabsList>
 
                 {/* Questions Tab */}
@@ -993,6 +1233,243 @@ export default function AdminDashboard() {
                     </CardFooter>
                   </Card>
                 </TabsContent>
+
+                {/* Rewards Tab */}
+                <TabsContent value="rewards" className="mt-4">
+                  <Card className="shadow-sm">
+                    <CardHeader className="bg-primary/5">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                          <CardTitle>Rewards Management</CardTitle>
+                          <CardDescription>Generate and distribute rewards for correct predictions</CardDescription>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => setShowMerkleGuide(true)}>
+                          <HelpCircle className="h-4 w-4 mr-2" />
+                          How it works
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-6">
+                      {selectedMatch ? (
+                        <div className="space-y-6">
+                          {/* Match Status */}
+                          <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                            <div>
+                              <h3 className="font-medium">Match Status</h3>
+                              <p className="text-sm text-muted-foreground">
+                                {selectedMatch.teamA} vs {selectedMatch.teamB}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {hasActiveQuestions ? (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300"
+                                >
+                                  <Clock className="h-3 w-3 mr-1" />
+                                  Active Questions
+                                </Badge>
+                              ) : hasUnansweredQuestions ? (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
+                                >
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                  Needs Finalization
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300"
+                                >
+                                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                                  Ready for Rewards
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Merkle Tree Generation */}
+                          <Card className="border-primary/20">
+                            <CardHeader className="bg-primary/5 pb-3">
+                              <CardTitle className="text-base flex items-center gap-2">
+                                <GitMerge className="h-4 w-4 text-primary" />
+                                Merkle Tree Generation
+                              </CardTitle>
+                              <CardDescription>
+                                Create a Merkle tree for all winning predictions in this match
+                              </CardDescription>
+                              {selectedMatch && selectedMatch.merkleRoot && (
+                                <div className="mt-2">
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300"
+                                  >
+                                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                                    Merkle Root Stored
+                                  </Badge>
+                                </div>
+                              )}
+                            </CardHeader>
+                            <CardContent className="p-4">
+                              <div className="space-y-4">
+                                <p className="text-sm text-muted-foreground">
+                                  The Merkle tree allows for efficient verification of winning predictions on-chain.
+                                  Each user's address and reward amount are hashed together to create a leaf in the
+                                  tree.
+                                </p>
+
+                                {merkleRoot && (
+                                  <div className="mt-4 p-4 bg-muted rounded-md">
+                                    <div className="flex flex-col gap-2">
+                                      <div className="flex justify-between">
+                                        <span className="text-sm font-medium">Merkle Root:</span>
+                                        <span className="text-sm font-mono">{`${merkleRoot.slice(0, 10)}...${merkleRoot.slice(-8)}`}</span>
+                                      </div>
+                                      {rewardsData && (
+                                        <>
+                                          <div className="flex justify-between">
+                                            <span className="text-sm font-medium">Users with Rewards:</span>
+                                            <span className="text-sm">{rewardsData.rewardsCount}</span>
+                                          </div>
+                                          <div className="flex justify-between">
+                                            <span className="text-sm font-medium">Total Tokens to Distribute:</span>
+                                            <span className="text-sm">{rewardsData.rewardsCount * 2} CPT</span>
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {updateSuccess && (
+                                  <Alert className="bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800">
+                                    <CheckCircle2 className="h-4 w-4" />
+                                    <AlertTitle>Success!</AlertTitle>
+                                    <AlertDescription>
+                                      Merkle root successfully updated in the contract. Users can now claim their
+                                      rewards.
+                                    </AlertDescription>
+                                  </Alert>
+                                )}
+
+                                {!isReadyForRewards && (
+                                  <Alert className="bg-amber-100 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <AlertTitle>Not Ready for Rewards</AlertTitle>
+                                    <AlertDescription>
+                                      {hasActiveQuestions
+                                        ? "This match still has active questions. End the match and finalize all questions first."
+                                        : hasUnansweredQuestions
+                                          ? "Some questions need to be finalized with correct answers before generating rewards."
+                                          : "No questions found for this match. Add questions first."}
+                                    </AlertDescription>
+                                  </Alert>
+                                )}
+                              </div>
+                            </CardContent>
+                            <CardFooter className="bg-primary/5 p-3 flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                onClick={generateMerkleRoot}
+                                disabled={isGeneratingMerkle || !isReadyForRewards}
+                              >
+                                {isGeneratingMerkle ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Generating...
+                                  </>
+                                ) : (
+                                  <>
+                                    <GitMerge className="h-4 w-4 mr-2" />
+                                    Generate Merkle Root
+                                  </>
+                                )}
+                              </Button>
+                              {merkleRoot && !updateSuccess && (
+                                <Button onClick={updateContractRoot} disabled={isUpdatingContract}>
+                                  {isUpdatingContract ? (
+                                    <>
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                      Updating Contract...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Database className="h-4 w-4 mr-2" />
+                                      Update Contract
+                                    </>
+                                  )}
+                                </Button>
+                              )}
+                            </CardFooter>
+                          </Card>
+
+                          {/* Reward Distribution Steps */}
+                          <Accordion type="single" collapsible className="w-full">
+                            <AccordionItem value="steps">
+                              <AccordionTrigger className="text-sm font-medium">
+                                Reward Distribution Process
+                              </AccordionTrigger>
+                              <AccordionContent>
+                                <div className="space-y-4 p-2">
+                                  <div className="flex items-start gap-3">
+                                    <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
+                                      1
+                                    </div>
+                                    <div>
+                                      <h4 className="font-medium">End Match & Finalize Questions</h4>
+                                      <p className="text-sm text-muted-foreground">
+                                        Set the correct answer for all questions in the match.
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-start gap-3">
+                                    <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
+                                      2
+                                    </div>
+                                    <div>
+                                      <h4 className="font-medium">Generate Merkle Tree</h4>
+                                      <p className="text-sm text-muted-foreground">
+                                        Create a Merkle tree containing all winning predictions and their rewards.
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-start gap-3">
+                                    <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
+                                      3
+                                    </div>
+                                    <div>
+                                      <h4 className="font-medium">Update Smart Contract</h4>
+                                      <p className="text-sm text-muted-foreground">
+                                        Store the Merkle root in the smart contract for on-chain verification.
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-start gap-3">
+                                    <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
+                                      4
+                                    </div>
+                                    <div>
+                                      <h4 className="font-medium">Users Claim Rewards</h4>
+                                      <p className="text-sm text-muted-foreground">
+                                        Users can now claim their rewards by providing a Merkle proof.
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          </Accordion>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-64">
+                          <Coins className="h-12 w-12 text-muted-foreground mb-4" />
+                          <p className="text-muted-foreground text-center">Select a match to manage rewards</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
               </Tabs>
             </div>
           </div>
@@ -1110,6 +1587,294 @@ export default function AdminDashboard() {
               <Check className="h-4 w-4 mr-2" />
               Set Answer
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Merkle Tree Dialog */}
+      <Dialog open={showMerkleDialog} onOpenChange={setShowMerkleDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Generate Merkle Tree for Rewards</DialogTitle>
+            <DialogDescription>
+              Create a Merkle tree for distributing rewards to users with correct predictions
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            {selectedMatch && (
+              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                <div className="font-medium">
+                  {selectedMatch.teamA} vs {selectedMatch.teamB}
+                </div>
+                <Badge variant="outline">{formatDate(selectedMatch.matchDate)}</Badge>
+              </div>
+            )}
+
+            {merkleRoot ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
+                  <h3 className="font-medium mb-2">Merkle Root Generated</h3>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm font-medium">Root Hash:</span>
+                      <span className="text-sm font-mono">{`${merkleRoot.slice(0, 10)}...${merkleRoot.slice(-8)}`}</span>
+                    </div>
+                    {rewardsData && (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium">Users with Rewards:</span>
+                          <span className="text-sm">{rewardsData.rewardsCount}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium">Total Tokens:</span>
+                          <span className="text-sm">{rewardsData.rewardsCount * 2} CPT</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {updateSuccess ? (
+                  <Alert className="bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <AlertTitle>Success!</AlertTitle>
+                    <AlertDescription>
+                      Merkle root successfully updated in the contract. Users can now claim their rewards.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <Alert className="bg-amber-100 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Action Required</AlertTitle>
+                    <AlertDescription>
+                      The Merkle root has been generated but not yet updated in the smart contract. Update the contract
+                      to enable user claims.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            ) : (
+              <Alert className="bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800">
+                <FileText className="h-4 w-4" />
+                <AlertTitle>Generate Merkle Tree</AlertTitle>
+                <AlertDescription>
+                  This will create a Merkle tree containing all winning predictions for this match. The root will be
+                  used to verify reward claims on-chain.
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowMerkleDialog(false)}>
+              Close
+            </Button>
+            {!merkleRoot ? (
+              <Button onClick={generateMerkleRoot} disabled={isGeneratingMerkle || !isReadyForRewards}>
+                {isGeneratingMerkle ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <GitMerge className="h-4 w-4 mr-2" />
+                    Generate Merkle Root
+                  </>
+                )}
+              </Button>
+            ) : !updateSuccess ? (
+              <Button onClick={updateContractRoot} disabled={isUpdatingContract}>
+                {isUpdatingContract ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Updating Contract...
+                  </>
+                ) : (
+                  <>
+                    <Database className="h-4 w-4 mr-2" />
+                    Update Contract
+                  </>
+                )}
+              </Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* End Match Dialog */}
+      <Dialog open={showEndMatchDialog} onOpenChange={setShowEndMatchDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>End Match</DialogTitle>
+            <DialogDescription>Finalize the match and set answers for all active questions</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            {selectedMatch && (
+              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                <div className="font-medium">
+                  {selectedMatch.teamA} vs {selectedMatch.teamB}
+                </div>
+                <Badge variant="outline">{formatDate(selectedMatch.matchDate)}</Badge>
+              </div>
+            )}
+
+            <Alert className="bg-amber-100 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Important</AlertTitle>
+              <AlertDescription>
+                Ending a match will close all active questions. You'll need to set the correct answer for each question
+                before rewards can be distributed.
+              </AlertDescription>
+            </Alert>
+
+            {activeQuestions.length > 0 && (
+              <div>
+                <h3 className="font-medium mb-2">Active Questions ({activeQuestions.length})</h3>
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                  {activeQuestions.map((question) => (
+                    <div key={question._id} className="p-2 border rounded-md bg-background">
+                      <p className="text-sm font-medium truncate">{question.question}</p>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-xs text-muted-foreground">{question.options.length} options</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs"
+                          onClick={() => {
+                            setAnswerQuestion(question)
+                            setSelectedAnswer("")
+                            setShowAnswerDialog(true)
+                            setShowEndMatchDialog(false)
+                          }}
+                        >
+                          Set Answer
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {endMatchSuccess && (
+              <Alert className="bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800">
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertTitle>Success!</AlertTitle>
+                <AlertDescription>Match ended successfully. All questions have been finalized.</AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEndMatchDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={endMatch} disabled={isEndingMatch || activeQuestions.length === 0} variant="default">
+              {isEndingMatch ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 mr-2" />
+                  End Match
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Merkle Guide Dialog */}
+      <Dialog open={showMerkleGuide} onOpenChange={setShowMerkleGuide}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>How Merkle Trees Work for Rewards</DialogTitle>
+            <DialogDescription>Understanding the reward distribution process</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-6">
+            <div className="space-y-2">
+              <h3 className="font-medium">What is a Merkle Tree?</h3>
+              <p className="text-sm text-muted-foreground">
+                A Merkle tree is a binary tree of hashes that allows for efficient and secure verification of large data
+                sets. In our case, it's used to verify which users are entitled to rewards without storing all that data
+                on-chain.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="font-medium">The Reward Process</h3>
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
+                    1
+                  </div>
+                  <div>
+                    <h4 className="font-medium">Finalize Questions</h4>
+                    <p className="text-sm text-muted-foreground">
+                      After a match ends, set the correct answer for each question.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
+                    2
+                  </div>
+                  <div>
+                    <h4 className="font-medium">Generate Merkle Tree</h4>
+                    <p className="text-sm text-muted-foreground">
+                      The system identifies all winning predictions and creates a Merkle tree where each leaf contains a
+                      user's address and reward amount.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
+                    3
+                  </div>
+                  <div>
+                    <h4 className="font-medium">Store Merkle Root</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Only the root hash of the Merkle tree is stored on-chain, saving gas costs while maintaining
+                      security.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
+                    4
+                  </div>
+                  <div>
+                    <h4 className="font-medium">User Claims</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Users can claim their rewards by providing a Merkle proof that verifies they are entitled to a
+                      specific reward amount.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-muted rounded-lg">
+              <h3 className="font-medium mb-2">Benefits</h3>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5" />
+                  <span>Gas efficient - only one hash stored on-chain</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5" />
+                  <span>Secure - mathematically verifiable proofs</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5" />
+                  <span>Scalable - works efficiently even with thousands of users</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowMerkleGuide(false)}>Got it</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

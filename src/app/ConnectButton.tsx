@@ -1,9 +1,7 @@
 "use client";
 
-import type React from "react";
-
-import { useState } from "react";
-import { useConnect, useAccount, useDisconnect, type Connector } from "wagmi";
+import { useState, useEffect } from "react";
+import { useConnect, useAccount, useDisconnect } from "wagmi";
 import { motion } from "framer-motion";
 import {
   DropdownMenu,
@@ -25,13 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  Card,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -48,41 +40,48 @@ import {
   ExternalLink,
   AlertCircle,
   ShieldCheck,
+  Download,
 } from "lucide-react";
 
-// Wallet icons mapping - you can replace these with actual wallet icons
-const walletIcons: Record<string, React.ReactNode> = {
-  MetaMask: (
-    <img
-      src="/placeholder.svg?height=24&width=24"
-      alt="MetaMask"
-      className="h-6 w-6"
-    />
-  ),
-  WalletConnect: (
-    <img
-      src="/placeholder.svg?height=24&width=24"
-      alt="WalletConnect"
-      className="h-6 w-6"
-    />
-  ),
-  "Coinbase Wallet": (
-    <img
-      src="/placeholder.svg?height=24&width=24"
-      alt="Coinbase Wallet"
-      className="h-6 w-6"
-    />
-  ),
-  // Add more wallet icons as needed
-  default: <Wallet className="h-6 w-6" />,
-};
+// MetaMask icon
+const MetaMaskIcon = (
+  <img
+    src="/metamask.webp"
+    alt="MetaMask"
+    className=" w-10"
+  />
+);
 
 export function ConnectButton() {
   const { address, connector, isConnected, chain } = useAccount();
   const { connect, connectors, error, isPending } = useConnect();
   const { disconnect } = useDisconnect();
   const [isDialogOpen, setIsDialogOpen] = useState<boolean>(false);
+  const [isMetaMaskInstallDialogOpen, setIsMetaMaskInstallDialogOpen] =
+    useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+  const [isMetaMaskAvailable, setIsMetaMaskAvailable] =
+    useState<boolean>(false);
+
+  // Check if MetaMask is installed
+  useEffect(() => {
+    const checkMetaMaskAvailability = () => {
+      // Check if window.ethereum exists and has the isMetaMask property
+      const isAvailable =
+        typeof window !== "undefined" &&
+        window.ethereum &&
+        window.ethereum.isMetaMask;
+
+      setIsMetaMaskAvailable(!!isAvailable);
+    };
+
+    checkMetaMaskAvailability();
+  }, []);
+
+  // Filter connectors to only include MetaMask
+  const metaMaskConnector = connectors.find(
+    (c) => c.name === "MetaMask" || c.id === "metaMask" || c.id === "injected"
+  );
 
   // Format address for display
   const formatAddress = (addr: string | undefined): string => {
@@ -105,7 +104,16 @@ export function ConnectButton() {
     return `${chain.blockExplorers.default.url}/address/${address}`;
   };
 
-  // If connected, show the account dropdow
+  // Handle connect button click
+  const handleConnectClick = () => {
+    if (isMetaMaskAvailable) {
+      setIsDialogOpen(true);
+    } else {
+      setIsMetaMaskInstallDialogOpen(true);
+    }
+  };
+
+  // If connected, show the account dropdown
   if (isConnected && address) {
     return (
       <TooltipProvider>
@@ -220,7 +228,7 @@ export function ConnectButton() {
   return (
     <>
       <Button
-        onClick={() => setIsDialogOpen(true)}
+        onClick={handleConnectClick}
         className="flex items-center gap-2"
         size="default"
       >
@@ -228,6 +236,7 @@ export function ConnectButton() {
         Connect Wallet
       </Button>
 
+      {/* MetaMask Connection Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -236,8 +245,7 @@ export function ConnectButton() {
               Connect Your Wallet
             </DialogTitle>
             <DialogDescription>
-              Choose your preferred wallet provider to connect to this
-              application.
+              Connect with MetaMask to use this application.
             </DialogDescription>
           </DialogHeader>
 
@@ -252,75 +260,47 @@ export function ConnectButton() {
           )}
 
           <div className="grid gap-4 py-2">
-            {connectors.map((connector: Connector) => {
-              const isReady = true;
-
-              return (
-                <motion.div
-                  key={connector.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Card
-                    className={`cursor-pointer transition-all ${
-                      isReady
-                        ? "hover:border-primary/50 hover:shadow-sm"
-                        : "opacity-60"
-                    }`}
-                  >
-                    <CardHeader className="p-4 pb-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {walletIcons[connector.name] || walletIcons.default}
-                          <div>
-                            <CardTitle className="text-base">
-                              {connector.name}
-                            </CardTitle>
-                            {!isReady && (
-                              <CardDescription className="text-xs">
-                                Not installed
-                              </CardDescription>
-                            )}
-                          </div>
+            {metaMaskConnector && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Card className="cursor-pointer transition-all hover:border-primary/50 hover:shadow-sm">
+                  <CardHeader className="p-4 pb-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center w-24 gap-3">
+                        {MetaMaskIcon}
+                        <div>
+                          <CardTitle className="text-base">MetaMask</CardTitle>
                         </div>
-                        {!isReady && (
-                          <Badge
-                            variant="outline"
-                            className="text-xs bg-amber-500/10 text-amber-500 border-amber-500/20"
-                          >
-                            Install Required
-                          </Badge>
-                        )}
                       </div>
-                    </CardHeader>
-                    <CardFooter className="p-4 pt-2 flex justify-end">
-                      <Button
-                        onClick={() => {
-                          connect({ connector });
-                          setIsDialogOpen(false);
-                        }}
-                        disabled={isPending || !isReady}
-                        variant={isReady ? "default" : "outline"}
-                        size="sm"
-                        className="gap-2"
-                      >
-                        {isPending ? (
-                          <>
-                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                            Connecting...
-                          </>
-                        ) : isReady ? (
-                          "Connect"
-                        ) : (
-                          "Install"
-                        )}
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                </motion.div>
-              );
-            })}
+                    </div>
+                  </CardHeader>
+                  <CardFooter className="p-4 pt-2 flex justify-end">
+                    <Button
+                      onClick={() => {
+                        connect({ connector: metaMaskConnector });
+                        setIsDialogOpen(false);
+                      }}
+                      disabled={isPending}
+                      variant="default"
+                      size="sm"
+                      className="gap-2"
+                    >
+                      {isPending ? (
+                        <>
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                          Connecting...
+                        </>
+                      ) : (
+                        "Connect"
+                      )}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </motion.div>
+            )}
           </div>
 
           <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
@@ -328,6 +308,54 @@ export function ConnectButton() {
               <ShieldCheck className="h-3 w-3" />
               <span>Your wallet is only used for secure authentication</span>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MetaMask Install Dialog */}
+      <Dialog
+        open={isMetaMaskInstallDialogOpen}
+        onOpenChange={setIsMetaMaskInstallDialogOpen}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              MetaMask Required
+            </DialogTitle>
+            <DialogDescription>
+              MetaMask is not installed. Please install MetaMask to continue.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-6 flex flex-col items-center gap-4">
+            {MetaMaskIcon}
+            <div className="text-center">
+              <p className="font-medium mb-2">MetaMask Not Detected</p>
+              <p className="text-sm text-muted-foreground">
+                This application requires MetaMask to connect your wallet.
+                Please install MetaMask and then return to this site.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsMetaMaskInstallDialogOpen(false)}
+              className="sm:order-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() =>
+                window.open("https://metamask.io/download/", "_blank")
+              }
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Install MetaMask
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
